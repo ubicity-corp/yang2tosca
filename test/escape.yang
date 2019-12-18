@@ -1,0 +1,29 @@
+// Contents of "escape.yang"
+module escape {
+  yang-version 1.1;
+  namespace "urn:example:escape";
+  prefix "sys";
+
+  organization "Example Inc.";
+  contact "joe@example.com";
+  description
+    "The module for entities implementing the Example system.";
+
+  revision 2007-06-09 {
+    description "Initial revision.";
+  }
+
+   typedef my-type1 {
+     type enumeration {
+        enum "String";
+        enum "~";
+        enum "true";
+        enum "10";
+        enum "10.2";
+        enum "2002-08-15T17:18:23.18-06:00";
+        enum "2002-08-15";
+     }
+   }
+}
+
+

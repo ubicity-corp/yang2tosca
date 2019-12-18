@@ -1,0 +1,63 @@
+// Contents of "example-length.yang"
+module example-length {
+  yang-version 1.1;
+  namespace "urn:example:length";
+  prefix "sys";
+
+  organization "Example Inc.";
+  contact "joe@example.com";
+  description
+    "The module for entities implementing the Example system.";
+
+  revision 2007-06-09 {
+    description "Initial revision.";
+  }
+
+ typedef my-base-str-type1 {
+     type string {
+         length "255";
+       }
+     }
+
+
+ typedef my-base-str-type2 {
+     type string {
+         length "1..255";
+       }
+     }
+
+
+ typedef my-base-str-type3 {
+     type string {
+         length "min..255";
+       }
+     }
+
+
+ typedef my-base-str-type4 {
+     type string {
+         length "10..max";
+       }
+     }
+
+
+ typedef my-base-str-type5 {
+     type string {
+       length "11 | 42..255";
+     }
+  }
+
+ typedef my-base-str-type6 {
+     type string {
+       length "11 | 42..max";
+     }
+  }
+
+ typedef my-base-str-type7 {
+     type string {
+       length "11 | min..7";
+     }
+  }
+}
+
+
