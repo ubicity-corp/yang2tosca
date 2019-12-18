@@ -1,7 +1,0 @@
-Comcast-SDWAN-InventorySanity.yang:39: error: module "Comcast-SDWAN-RoutingInstances" not found in search path
-Comcast-SDWAN-InventorySanity.yang:148: error: node Comcast-SDWAN-InventorySanity::InterfaceRoutingProtocolConfiguration is not found
-Comcast-SDWAN-Inventory.yang:45: error: module "Comcast-SDWAN-RoutingInstances" not found in search path
-Comcast-SDWAN-ServiceDetails.yang:27: error: module "Comcast-SDWAN-RoutingInstances" not found in search path
-Comcast-SDWAN-ServiceDetails.yang:270: error: node Comcast-SDWAN-ServiceDetails::InterfaceRoutingProtocolConfiguration is not found
-Comcast-SDWAN-StandardFirewallProfiles.yang:21: error: grouping "StandardFirewallProfilesList" not found in module Comcast-SDWAN-FWQOS
-Comcast-SDWAN-TrafficMatch.yang:15: error: module "Comcast-SDWAN-Zones" not found in search path
