@@ -423,19 +423,33 @@ def emit_revision(ctx, stmt, fd, indent):
     # description   0..1        
     # reference     0..1        
     description = stmt.search_one('description')
-    handled = ['description']
+    reference = stmt.search_one('reference')
+    handled = ['description', 'reference']
     check_substmts(stmt, handled)
 
-    if not description:
+    if not description and not reference:
         return
 
-    lines = wrap_text(description.arg)
+    # Emit the revision
     fd.write(
-        "%s'%s': "
+        "%s'%s':\n"
         % (indent, stmt.arg)
     )
-    emit_text_string(ctx, lines, fd, indent)
-
+    indent = indent + '  '
+    if description:
+        description_lines = wrap_text(description.arg)
+        fd.write(
+            "%sdescription: "
+            % (indent)
+        )
+        emit_text_string(ctx, description_lines, fd, indent)
+    if reference:
+        reference_lines = wrap_text(reference.arg)
+        fd.write(
+            "%sreference: "
+            % (indent)
+        )
+        emit_text_string(ctx, reference_lines, fd, indent)
 
 def emit_namespace(ctx, stmt, fd, indent):
     fd.write(
