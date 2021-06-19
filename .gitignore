@@ -110,6 +110,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# Emacs
+*~
+*.bak
+
+# TOSCA
+*.csar
+
 # Spyder project settings
 .spyderproject
 .spyproject
