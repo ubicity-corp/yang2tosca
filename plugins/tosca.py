@@ -344,10 +344,18 @@ def emit_description(ctx, stmt, fd, indent):
 
 
 def emit_reference(ctx, stmt, fd, indent):
+
+    # Check if text needs to be wrapped
+    lines = wrap_text(stmt.arg)
+
+    # Emit reference key
     fd.write(
-        "%sreference: >-\n%s%s\n"
-        % (indent, indent + '  ', stmt.arg)
+        "%sreference: "
+        % (indent)
     )
+    # Emit text
+    emit_text_string(ctx, lines, fd, indent)
+
     handled = []
     check_substmts(stmt, handled)
 
@@ -437,19 +445,9 @@ def emit_revision(ctx, stmt, fd, indent):
     )
     indent = indent + '  '
     if description:
-        description_lines = wrap_text(description.arg)
-        fd.write(
-            "%sdescription: "
-            % (indent)
-        )
-        emit_text_string(ctx, description_lines, fd, indent)
+        emit_description(ctx, description, fd, indent)
     if reference:
-        reference_lines = wrap_text(reference.arg)
-        fd.write(
-            "%sreference: "
-            % (indent)
-        )
-        emit_text_string(ctx, reference_lines, fd, indent)
+        emit_reference(ctx, reference, fd, indent)
 
 def emit_namespace(ctx, stmt, fd, indent):
     fd.write(
