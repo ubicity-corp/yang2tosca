@@ -1149,6 +1149,9 @@ def emit_leaf(ctx, stmt, fd, indent, prop=True):
     default = stmt.search_one('default')
     if default:
         emit_default(ctx, default, fd, indent)
+    units = stmt.search_one('units')
+    if units:
+        emit_units(ctx, units, fd, indent)
     when = stmt.search_one('when')
     if when:
         emit_when(ctx, when, fd, indent)
@@ -1156,7 +1159,7 @@ def emit_leaf(ctx, stmt, fd, indent, prop=True):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    handled = ['reference', 'description', 'type', 'config',
+    handled = ['reference', 'description', 'type', 'units', 'config',
                'mandatory', 'default', 'must', 'when' ]
     check_substmts(stmt, handled)
 
@@ -1254,6 +1257,9 @@ def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
             % (indent)
         )
         emit_type(ctx, type, fd, indent + '  ')
+    units = stmt.search_one('units')
+    if units:
+        emit_units(ctx, units, fd, indent)
     emit_constraints(ctx, stmt, fd, indent)
     when = stmt.search_one('when')
     if when:
@@ -1262,7 +1268,7 @@ def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    handled = ['reference', 'description', 'type', 'config',
+    handled = ['reference', 'description', 'type', 'units', 'config',
                'min-elements', 'max-elements', 'must']
     check_substmts(stmt, handled)
 
@@ -1510,15 +1516,25 @@ def emit_type(ctx, stmt, fd, indent):
     path = stmt.search_one("path")
     if path:
         emit_path(ctx, path, fd, indent)
+    # Emit commented fraction-digits
+    fraction_digits = stmt.search_one("fraction-digits")
+    if fraction_digits:
+        emit_fraction_digits(ctx, fraction_digits, fd, indent)
     emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['enum', 'length', 'range', 'pattern', 'path']
+    handled = ['enum', 'fraction-digits', 'length', 'range', 'pattern', 'path']
     check_substmts(stmt, handled)
 
 
 def emit_path(ctx, stmt, fd, indent):
     fd.write(
         "%s# path: %s\n"
+        % (indent, stmt.arg)
+    )
+    
+def emit_fraction_digits(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# fraction-digits: %s\n"
         % (indent, stmt.arg)
     )
     
@@ -1671,11 +1687,6 @@ def    emit_require_instance(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('require-instance')
-
-def    emit_fraction_digits(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    print('fraction-digits')
 
 def    emit_bit(ctx, stmt, fd, indent):
     # Sub-statements for the bit statement:
