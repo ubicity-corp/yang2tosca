@@ -232,9 +232,8 @@ def emit_module(ctx, stmt, fd, indent):
         emit_prefix(ctx, prefix, fd, indent)
     fd.write("\n")
 
-    # Emit imports
-    imports = stmt.search('import')
-    emit_imports(ctx, imports, fd, indent)
+    # Emit imports and includes
+    emit_imports_and_includes(ctx, stmt, fd, indent)
     fd.write("\n")
 
     # Beginning of data type definition section
@@ -247,7 +246,7 @@ def emit_module(ctx, stmt, fd, indent):
     # Sanity checking. To be removed later
     handled = [ 'description', 'yang-version', 
                 'contact', 'organization', 'revision', 'reference',
-                'namespace', 'prefix', 'import',
+                'namespace', 'prefix', 'import', 'include',
                 'typedef', 'grouping', 'container', 'container', 'list', 'uses']
     check_substmts(stmt, handled)
 
@@ -469,7 +468,10 @@ def emit_prefix(ctx, stmt, fd, indent):
     ctx.local_prefix = stmt.arg
 
 
-def emit_imports(ctx, imports, fd, indent):
+def emit_imports_and_includes(ctx, stmt, fd, indent):
+    imports = stmt.search('import')
+    includes = stmt.search('include')
+    
     fd.write(
         "imports:\n"
     )
@@ -479,12 +481,15 @@ def emit_imports(ctx, imports, fd, indent):
         "%s- file: %s\n%s  namespace_prefix: %s\n"
         % (indent, YANG_NAMESPACE, indent, YANG_NAMESPACE_PREFIX)
     )
-    # Add other imports from YANG module
+    # Add imports 
     for imprt in imports:
-        emit_import(ctx, imprt, fd, indent)
+        emit_import_or_include(ctx, imprt, fd, indent)
+    # Add includes
+    for include in includes:
+        emit_import_or_include(ctx, include, fd, indent)
 
 
-def emit_import(ctx, stmt, fd, indent):
+def emit_import_or_include(ctx, stmt, fd, indent):
 
     # Sub-statements for the import statement:
     #
@@ -502,7 +507,7 @@ def emit_import(ctx, stmt, fd, indent):
         if imported_namespace is not None:
             imported_namespace_name = imported_namespace.arg
         else:
-            imported_namespace_name = stmt.arg
+            imported_namespace_name = stmt.arg + '.yaml'
     else:
         imported_namespace_name = stmt.arg
 
@@ -605,7 +610,6 @@ def emit_derived_from(ctx, stmt, fd, indent):
 
     handled = ['enum', 'length', 'range', 'pattern']
     check_substmts(stmt, handled)
-
 
 
 def create_qualified_name(ctx, type_string):
@@ -958,18 +962,28 @@ def emit_data_type(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    # Now add properties
+    # Now add properties and attributes
     fd.write(
         "%sproperties:\n"
         % (indent)
     )
-    indent = indent + '  '
-    emit_properties(ctx, stmt, fd, indent)
+    emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
 
-    # If we have more then one uses statement, we'll just add the
+    # If we have more than one uses statement, we'll just add the
     # properties from the grouping specified in each 'uses' statement
     if len(uses) > 1:
-        emit_uses_properties(ctx, stmt, uses, fd, indent)
+        emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
+
+    fd.write(
+        "%sattributes:\n"
+        % (indent)
+    )
+    emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
+
+    # If we have more than one uses statement, we'll just add the
+    # attributes from the grouping specified in each 'uses' statement
+    if len(uses) > 1:
+        emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
 
 
 def emit_uses_derived_from(ctx, stmt, uses, fd, indent):
@@ -990,10 +1004,15 @@ def emit_uses_derived_from(ctx, stmt, uses, fd, indent):
 
 def emit_uses_properties(ctx, stmt, uses, fd, indent):
     for use in uses:
-        emit_use(ctx, stmt, use, fd, indent)
+        emit_use(ctx, stmt, use, fd, indent, prop=True)
 
 
-def emit_use(ctx, stmt, use, fd, indent):
+def emit_uses_attributes(ctx, stmt, uses, fd, indent):
+    for use in uses:
+        emit_use(ctx, stmt, use, fd, indent, prop=False)
+
+
+def emit_use(ctx, stmt, use, fd, indent, prop=True):
     # Sub-statements for the uses statement:
     #
     # augment       0..n        
@@ -1010,32 +1029,32 @@ def emit_use(ctx, stmt, use, fd, indent):
 
     # Just emit the properties in this grouping
     print("%s: uses(%s)" % (statements.mk_path_str(stmt, True), use.arg) )
-    emit_properties(ctx, use.i_grouping, fd, indent)
-                
+    emit_properties(ctx, use.i_grouping, fd, indent, prop=prop)
+        
 
-def emit_properties(ctx, stmt, fd, indent):
+def emit_properties(ctx, stmt, fd, indent, prop=True):
 
     # Try to maintain the order in which properties are defined by
     # iterating over list of sub-statements
     for sub in stmt.substmts:
         if sub.keyword == 'leaf':
-            emit_leaf(ctx, sub, fd, indent)
+            emit_leaf(ctx, sub, fd, indent, prop=prop)
         elif sub.keyword == 'leaf-list':
-            emit_leaf_list(ctx, sub, fd, indent)
+            emit_leaf_list(ctx, sub, fd, indent, prop=prop)
         elif sub.keyword == 'list':
-            emit_list(ctx, sub, fd, indent)
+            emit_list(ctx, sub, fd, indent, prop=prop)
         elif sub.keyword == 'container':
-            emit_container(ctx, sub, fd, indent)
+            emit_container(ctx, sub, fd, indent, prop=prop)
         elif sub.keyword == 'choice':
-            emit_choice(ctx, sub, fd, indent)
+            emit_choice(ctx, sub, fd, indent, prop=prop)
         elif sub.keyword == 'augment':
-            emit_augment(ctx, sub, fd, indent)
+            emit_augment(ctx, sub, fd, indent, prop=prop)
         else:
             # This statement does not define a property
             pass
 
 
-def emit_leaf(ctx, stmt, fd, indent):
+def emit_leaf(ctx, stmt, fd, indent, prop=True):
     # Sub-statements for the leaf statement:
     #
     # config        0..1        
@@ -1050,6 +1069,12 @@ def emit_leaf(ctx, stmt, fd, indent):
     # units         0..1        
     # when          0..1        
 
+    # Check if property or attribute
+    config = stmt.search_one('config')
+    is_attr = (config != None) and (config.arg=='false')
+    if is_attr == prop: return
+
+    # Get name
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
     else:
@@ -1068,7 +1093,8 @@ def emit_leaf(ctx, stmt, fd, indent):
     if type:
         emit_type(ctx, type, fd, indent)
     mandatory = stmt.search_one('mandatory')
-    emit_mandatory(ctx, mandatory, fd, indent)
+    if not is_attr:
+        emit_mandatory(ctx, mandatory, fd, indent)
     default = stmt.search_one('default')
     if default:
         emit_default(ctx, default, fd, indent)
@@ -1079,7 +1105,7 @@ def emit_leaf(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    handled = ['reference', 'description', 'type',
+    handled = ['reference', 'description', 'type', 'config',
                'mandatory', 'default', 'must', 'when' ]
     check_substmts(stmt, handled)
 
@@ -1108,7 +1134,7 @@ def emit_when(ctx, stmt, fd, indent):
         % (indent, stmt.arg)
     )
 
-def    emit_must(ctx, stmt, fd, indent):
+def emit_must(ctx, stmt, fd, indent):
     # Sub-statements for the must statement:
     #
     # description    0..1        
@@ -1130,7 +1156,7 @@ def    emit_must(ctx, stmt, fd, indent):
     check_substmts(stmt, handled)
 
 
-def emit_leaf_list(ctx, stmt, fd, indent):
+def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
     # Sub-statements for the leaf-list statement:
     #
     # config        0..1        
@@ -1146,6 +1172,11 @@ def emit_leaf_list(ctx, stmt, fd, indent):
     # type          1           
     # units         0..1        
     # when          0..1        
+
+    # Check if property or attribute
+    config = stmt.search_one('config')
+    is_attr = (config != None) and (config.arg=='false')
+    if is_attr == prop: return
 
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
@@ -1180,11 +1211,12 @@ def emit_leaf_list(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    handled = ['reference', 'description', 'type', 'min-elements', 'max-elements', 'must']
+    handled = ['reference', 'description', 'type', 'config',
+               'min-elements', 'max-elements', 'must']
     check_substmts(stmt, handled)
 
 
-def emit_list(ctx, stmt, fd, indent):
+def emit_list(ctx, stmt, fd, indent, prop=True):
 
     # Sub-statements for the list statement:
     #
@@ -1212,6 +1244,11 @@ def emit_list(ctx, stmt, fd, indent):
     # unique        0..n        
     # uses          0..n        
     # when          0..1        
+
+    # Check if property or attribute
+    config = stmt.search_one('config')
+    is_attr = (config != None) and (config.arg=='false')
+    if is_attr == prop: return
 
     # Find qualified entry_schema for this list
     if ctx.opts.tosca_qualifier:
@@ -1245,7 +1282,7 @@ def emit_list(ctx, stmt, fd, indent):
     )
     emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['reference', 'description', 
+    handled = ['reference', 'description', 'config',
                'typedef', 'container', 'grouping', 'list', 'uses', 'key',
                'leaf', 'leaf-list', 'min-elements', 'max-elements', 'when', 'must']
     check_substmts(stmt, handled)
@@ -1260,7 +1297,7 @@ def    emit_key(ctx, stmt, fd, indent):
     )
 
 
-def emit_container(ctx, stmt, fd, indent):
+def emit_container(ctx, stmt, fd, indent, prop=True):
 
     # Sub-statements for the container statement:
     #
@@ -1284,6 +1321,11 @@ def emit_container(ctx, stmt, fd, indent):
     # typedef       0..n        
     # uses          0..n        
     # when          0..1        
+
+    # Check if property or attribute
+    config = stmt.search_one('config')
+    is_attr = (config != None) and (config.arg=='false')
+    if is_attr == prop: return
 
     # Find qualified type name for this container
     if ctx.opts.tosca_qualifier:
@@ -1312,13 +1354,13 @@ def emit_container(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    handled = ['reference', 'description', 
+    handled = ['reference', 'description', 'config',
                'typedef', 'container', 'grouping', 'list', 'uses',
                'leaf', 'leaf-list', 'when', 'must']
     check_substmts(stmt, handled)
 
 
-def emit_choice(ctx, stmt, fd, indent):
+def emit_choice(ctx, stmt, fd, indent, prop=True):
     # Sub-statements for the choice statement:
     #
     # anydata       0..n        
@@ -1338,10 +1380,15 @@ def emit_choice(ctx, stmt, fd, indent):
     # status        0..1        
     # when          0..1        
 
+    # Check if property or attribute
+    config = stmt.search_one('config')
+    is_attr = (config != None) and (config.arg=='false')
+    if is_attr == prop: return
+
     cases = stmt.search('case')
     for case in cases:
         emit_case(ctx, case, fd, indent)
-    handled = ['case' ]
+    handled = ['case', 'config' ]
     check_substmts(stmt, handled)
 
 
@@ -1408,13 +1455,24 @@ def emit_type(ctx, stmt, fd, indent):
         "%stype: %s\n"
         % (indent, tosca_type)
     )
+    # For leafrefs, emit path for reference
+    path = stmt.search_one("path")
+    if path:
+        emit_path(ctx, path, fd, indent)
     emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['enum', 'length', 'range', 'pattern']
+    handled = ['enum', 'length', 'range', 'pattern', 'path']
     check_substmts(stmt, handled)
 
 
-def    emit_augment(ctx, stmt, fd, indent):
+def emit_path(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# path: %s\n"
+        % (indent, stmt.arg)
+    )
+    
+
+def    emit_augment(ctx, stmt, fd, indent, prop=True):
     # Sub-statements for the augment statement:
     #
     # action        0..n        
@@ -1576,11 +1634,6 @@ def    emit_fraction_digits(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('fraction-digits')
-
-def    emit_path(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    print('path')
 
 def    emit_bit(ctx, stmt, fd, indent):
     # Sub-statements for the bit statement:
@@ -1772,7 +1825,6 @@ def    emit_deviate(ctx, stmt, fd, indent):
     # unique        0..n        
     # units         0..1        
     print('deviate')
-
 
 
 type_map = {
