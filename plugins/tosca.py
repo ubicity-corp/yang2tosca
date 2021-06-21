@@ -1143,8 +1143,8 @@ def emit_leaf(ctx, stmt, fd, indent, prop=True):
     type = stmt.search_one('type')
     if type:
         emit_type(ctx, type, fd, indent)
-    mandatory = stmt.search_one('mandatory')
     if not is_attr:
+        mandatory = stmt.search_one('mandatory')
         emit_mandatory(ctx, mandatory, fd, indent)
     default = stmt.search_one('default')
     if default:
@@ -1442,10 +1442,56 @@ def emit_choice(ctx, stmt, fd, indent, prop=True):
     is_attr = (config != None) and (config.arg=='false')
     if is_attr == prop: return
 
+    # Get list of cases
     cases = stmt.search('case')
+
+    # Define a property for the choice
+    if ctx.opts.camel_case:
+        name = stringcase.camelcase(stmt.arg)
+    else:
+        name = stmt.arg
+    fd.write(
+        "%s%s:\n"
+        % (indent, name)
+    )
+    orig_indent = indent
+    indent = indent + '  '
+    description = stmt.search_one('description')
+    if description:
+        emit_description(ctx, description, fd, indent)
+    # Choices are always strings
+    fd.write(
+        "%stype: string\n"
+        % (indent)
+    )
+    if not is_attr:
+        mandatory = stmt.search_one('mandatory')
+        emit_mandatory(ctx, mandatory, fd, indent)
+    default = stmt.search_one('default')
+    if default:
+        emit_default(ctx, default, fd, indent)
+    # Write valid values
+    fd.write(
+        "%sconstraints:\n"
+        % (indent)
+    )
+    indent = indent + '  '
+    fd.write(
+        "%s- valid_values:\n"
+        % (indent)
+    )
+    indent = indent + '  '
+    for case in cases:
+        fd.write(
+            "%s- %s\n"
+            % (indent, case.arg)
+        )
+        
+    # Define properties for each of the cases
+    indent = orig_indent
     for case in cases:
         emit_case(ctx, case, fd, indent)
-    handled = ['case', 'config' ]
+    handled = ['case', 'config', 'default', 'description', 'mandatory' ]
     check_substmts(stmt, handled)
 
 
