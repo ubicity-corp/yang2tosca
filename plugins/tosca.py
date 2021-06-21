@@ -244,7 +244,7 @@ def emit_module(ctx, stmt, fd, indent):
     emit_data_types(ctx, stmt, fd, indent)
 
     # Sanity checking. To be removed later
-    handled = [ 'description', 'yang-version', 
+    handled = [ 'description', 'yang-version', 'feature',
                 'contact', 'organization', 'revision', 'reference',
                 'namespace', 'prefix', 'import', 'include',
                 'typedef', 'grouping', 'container', 'container', 'list', 'uses']
@@ -342,6 +342,13 @@ def emit_description(ctx, stmt, fd, indent):
     check_substmts(stmt, handled)
 
 
+def emit_status(ctx, stmt, fd, indent):
+    # Emit status key
+    fd.write(
+        "%sstatus: %s"
+        % (indent, stmt.arg)
+    )
+
 def emit_reference(ctx, stmt, fd, indent):
 
     # Check if text needs to be wrapped
@@ -365,8 +372,9 @@ def emit_metadata(ctx, stmt, fd, indent):
     contact = stmt.search_one('contact')
     reference = stmt.search_one('reference')
     revisions = stmt.search('revision')
+    features = stmt.search('feature')
 
-    if yang_version or organization or contact or reference or len(revisions):
+    if yang_version or organization or contact or reference or len(revisions) or len(features):
         fd.write(
             "%smetadata:\n"
             % indent
@@ -381,6 +389,8 @@ def emit_metadata(ctx, stmt, fd, indent):
             emit_revisions(ctx, revisions, fd, indent + '  ')
         if reference: 
             emit_reference(ctx, reference, fd, indent + '  ')
+        if len(features):
+            emit_features(ctx, features, fd, indent + '  ')
 
 
 def emit_yang_version(ctx, stmt, fd, indent):
@@ -447,6 +457,47 @@ def emit_revision(ctx, stmt, fd, indent):
         emit_description(ctx, description, fd, indent)
     if reference:
         emit_reference(ctx, reference, fd, indent)
+
+
+def emit_features(ctx, features, fd, indent):
+    fd.write(
+        "%sfeatures:\n"
+        % indent
+    )
+    for feature in features:
+        emit_feature(ctx, feature, fd, indent + '  ')
+
+
+def emit_feature(ctx, stmt, fd, indent):
+    # Sub-statements for the feature statement:
+    #
+    # description   0..1        
+    # if-feature    0..n        
+    # reference     0..1        
+    # status        0..1        
+    description = stmt.search_one('description')
+    reference = stmt.search_one('reference')
+    status = stmt.search_one('status')
+
+    handled = ['description', 'reference', 'status']
+    check_substmts(stmt, handled)
+
+    if not description and not reference and not status:
+        return
+
+    # Emit the feature
+    fd.write(
+        "%s'%s':\n"
+        % (indent, stmt.arg)
+    )
+    indent = indent + '  '
+    if description:
+        emit_description(ctx, description, fd, indent)
+    if reference:
+        emit_reference(ctx, reference, fd, indent)
+    if status:
+        emit_status(ctx, status, fd, indent)
+
 
 def emit_namespace(ctx, stmt, fd, indent):
     fd.write(
@@ -1028,7 +1079,7 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
         return
 
     # Just emit the properties in this grouping
-    print("%s: uses(%s)" % (statements.mk_path_str(stmt, True), use.arg) )
+    # print("%s: uses(%s)" % (statements.mk_path_str(stmt, True), use.arg) )
     emit_properties(ctx, use.i_grouping, fd, indent, prop=prop)
         
 
@@ -1595,15 +1646,6 @@ def    emit_yin_element(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('yin-element')
-
-def    emit_feature(ctx, stmt, fd, indent):
-    # Sub-statements for the feature statement:
-    #
-    # description   0..1        
-    # if-feature    0..n        
-    # reference     0..1        
-    # status        0..1        
-    print('feature')
 
 def    emit_if_feature(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
