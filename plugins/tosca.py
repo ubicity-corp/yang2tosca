@@ -696,11 +696,12 @@ def emit_constraints(ctx, stmt, fd, indent):
     in_range = stmt.search_one('range')
     pattern = stmt.search('pattern')
     enum = stmt.search('enum')
+    bits = stmt.search('bit')
     min_elements = stmt.search_one('min-elements')
     max_elements = stmt.search_one('max-elements')
 
     if length or in_range or len(pattern) or len(enum) \
-       or min_elements or max_elements:
+       or min_elements or max_elements or len(bits):
         fd.write(
             "%sconstraints:\n"
             % indent
@@ -713,6 +714,8 @@ def emit_constraints(ctx, stmt, fd, indent):
             emit_patterns(ctx, pattern, fd, indent + '  ')
         if len(enum):
             emit_enums(ctx, enum, fd, indent + '  ')
+        if len(bits):
+            emit_bits(ctx, bits, fd, indent + '  ')
         if min_elements: 
             emit_min_elements(ctx, min_elements, fd, indent + '  ')
         if max_elements: 
@@ -876,7 +879,6 @@ def emit_enums(ctx, stmt, fd, indent):
     for enum in stmt:
         emit_enum(ctx, enum, fd, indent)
 
-
 def emit_enum(ctx, stmt, fd, indent):
 
     # Sub-statements for the enum statement:
@@ -911,6 +913,44 @@ def emit_enum(ctx, stmt, fd, indent):
         )
 
     handled = ['value', 'description']
+    check_substmts(stmt, handled)
+
+
+def emit_bits(ctx, stmt, fd, indent):
+    fd.write(
+        "%s- valid_values:\n"
+        % indent
+    )
+    indent = indent + '  '
+    for bit in stmt:
+        emit_bit(ctx, bit, fd, indent)
+
+def emit_bit(ctx, stmt, fd, indent):
+    # Sub-statements for the bit statement:
+    #
+    # description   0..1        
+    # if-feature    0..n        
+    # position      0..1        
+    # reference     0..1        
+    # status        0..1        
+    description = stmt.search_one('description')
+    if must_escape(stmt.arg):
+        bit = "'" + stmt.arg + "'"
+    else:
+        bit = stmt.arg
+    fd.write(
+        "%s- %s\n"
+        % (indent, bit)
+    )
+    if description:
+        lines = wrap_text(description.arg)
+        for line in lines:
+            fd.write(
+                "%s  # %s\n"
+                % (indent, line)
+        )
+
+    handled = ['description']
     check_substmts(stmt, handled)
 
 
@@ -1568,7 +1608,7 @@ def emit_type(ctx, stmt, fd, indent):
         emit_fraction_digits(ctx, fraction_digits, fd, indent)
     emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['enum', 'fraction-digits', 'length', 'range', 'pattern', 'path']
+    handled = ['bit', 'enum', 'fraction-digits', 'length', 'range', 'pattern', 'path']
     check_substmts(stmt, handled)
 
 
@@ -1733,16 +1773,6 @@ def    emit_require_instance(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('require-instance')
-
-def    emit_bit(ctx, stmt, fd, indent):
-    # Sub-statements for the bit statement:
-    #
-    # description   0..1        
-    # if-feature    0..n        
-    # position      0..1        
-    # reference     0..1        
-    # status        0..1        
-    print('bit')
 
 def    emit_position(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
