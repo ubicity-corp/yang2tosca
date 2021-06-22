@@ -224,13 +224,6 @@ def emit_module(ctx, stmt, fd, indent):
     fd.write("\n")
 
     # Emit namespace and prefix
-    namespace = stmt.search_one("namespace")
-    if namespace:
-        emit_namespace(ctx, namespace, fd, indent)
-    prefix = stmt.search_one("prefix")
-    if prefix:
-        emit_prefix(ctx, prefix, fd, indent)
-    fd.write("\n")
 
     # Emit imports and includes
     emit_imports_and_includes(ctx, stmt, fd, indent)
@@ -373,24 +366,32 @@ def emit_metadata(ctx, stmt, fd, indent):
     reference = stmt.search_one('reference')
     revisions = stmt.search('revision')
     features = stmt.search('feature')
+    namespace = stmt.search_one("namespace")
+    prefix = stmt.search_one("prefix")
 
-    if yang_version or organization or contact or reference or len(revisions) or len(features):
+    if yang_version or organization or contact or reference \
+       or len(revisions) or len(features) or namespace or prefix:
         fd.write(
             "%smetadata:\n"
             % indent
         )
+        indent = indent + '  '
         if yang_version: 
-            emit_yang_version(ctx, yang_version, fd, indent + '  ')
+            emit_yang_version(ctx, yang_version, fd, indent)
         if organization: 
-            emit_organization(ctx, organization, fd, indent + '  ')
+            emit_organization(ctx, organization, fd, indent)
         if contact: 
-            emit_contact(ctx, contact, fd, indent + '  ')
+            emit_contact(ctx, contact, fd, indent)
+        if namespace:
+            emit_namespace(ctx, namespace, fd, indent)
+        if prefix:
+            emit_prefix(ctx, prefix, fd, indent)
         if len(revisions):
-            emit_revisions(ctx, revisions, fd, indent + '  ')
+            emit_revisions(ctx, revisions, fd, indent)
         if reference: 
-            emit_reference(ctx, reference, fd, indent + '  ')
+            emit_reference(ctx, reference, fd, indent)
         if len(features):
-            emit_features(ctx, features, fd, indent + '  ')
+            emit_features(ctx, features, fd, indent)
 
 
 def emit_yang_version(ctx, stmt, fd, indent):
@@ -512,7 +513,7 @@ def emit_prefix(ctx, stmt, fd, indent):
         % indent
     )
     fd.write(
-        "%s# prefix: %s\n"
+        "%sprefix: %s\n"
         % (indent, stmt.arg)
     )
     # Track local prefix in context since we may need it later
