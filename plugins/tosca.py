@@ -653,6 +653,24 @@ def emit_derived_from(ctx, stmt, fd, indent):
         # prefix if necessary (since TOSCA doesn't have locally
         # defined prefixes) and prepend the tosca qualifier
         tosca_type = create_qualified_name(ctx, stmt.arg)
+
+    # We don't have a good way to handle YANG unions. For now, just
+    # write out each of the types in the union and fix manually.
+    if tosca_type == 'union':
+        fd.write("%s# The YANG type is a union. Select one of the following options:\n"
+                 % (indent))
+        types = stmt.search('type')
+        count = 1
+        for typedef in types:
+            fd.write("%s# Option %d\n"
+                     % (indent, count))
+            emit_derived_from(ctx, typedef, fd, indent)
+            count = count+1
+        fd.write("%s#\n"
+                 % (indent))
+        return
+
+    # Regular type (not a union)
     fd.write(
         "%sderived_from: %s\n"
         % (indent, tosca_type)
