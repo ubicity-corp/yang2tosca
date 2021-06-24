@@ -138,9 +138,9 @@ class ToscaPlugin(plugin.PyangPlugin):
             emit_module(ctx, module, fd, '')
 
 
-# Namespace for built-in YANG types
-YANG_NAMESPACE = 'urn:ietf:params:xml:ns:yang:1'
-YANG_NAMESPACE_PREFIX = 'yang'
+# Namespace for built-in IETF types
+IETF_NAMESPACE = 'org.ietf:1.0'
+IETF_NAMESPACE_PREFIX = 'inet'
 
 # Regular expressions to parse YANG range and length
 # expressions. Copied from pyang's syntax.py file
@@ -302,8 +302,11 @@ def wrap_text(text_string):
 
 
 def emit_text_string(ctx, lines, fd, indent):
+    # Write a text value. We use folded style if the text consists of
+    # multiple lines or if it includes a colon character (which would
+    # violate YAML syntax)
 
-    if len(lines) > 1:
+    if len(lines) > 1 or (':' in lines[0]):
         # Emit folding character
         fd.write(">-\n")
         # Emit individual lines
@@ -531,7 +534,7 @@ def emit_imports_and_includes(ctx, stmt, fd, indent):
     # Always import built-in YANG types
     fd.write(
         "%s- file: %s\n%s  namespace_prefix: %s\n"
-        % (indent, YANG_NAMESPACE, indent, YANG_NAMESPACE_PREFIX)
+        % (indent, IETF_NAMESPACE, indent, IETF_NAMESPACE_PREFIX)
     )
     # Add imports 
     for imprt in imports:
@@ -553,31 +556,38 @@ def emit_import_or_include(ctx, stmt, fd, indent):
     # TOSCA will import the module by its namespace name.  First, find
     # the imported module from the context
     imported_module = ctx.get_module(stmt.arg)
+    imported_module_name = stmt.arg + '.yaml'
+
     if imported_module is not None:
         # Find namespace of imported module
         imported_namespace = imported_module.search_one("namespace")
         if imported_namespace is not None:
             imported_namespace_name = imported_namespace.arg
         else:
-            imported_namespace_name = stmt.arg + '.yaml'
+            imported_namespace_name = None
     else:
-        imported_namespace_name = stmt.arg
-
+        imported_namespace_name = None
+        
     # Emit import statement
     prefix = stmt.search_one('prefix')
-    if prefix:
+    if prefix or imported_namespace_name:
         fd.write(
             "%s- file: %s\n"
-            % (indent, imported_namespace_name)
+            % (indent, imported_module_name)
         )
         fd.write(
             "%s  namespace_prefix: %s\n"
             % (indent, prefix.arg)
         )
+        if imported_namespace_name:
+            fd.write(
+                "%s  # namespace: %s\n"
+                % (indent, imported_namespace_name)
+        )
     else:
         fd.write(
             "%s- %s\n"
-            % (indent, imported_namespace_name)
+            % (indent, imported_module_name)
         )
     handled = ['prefix']
     check_substmts(stmt, handled)
@@ -595,6 +605,7 @@ def emit_typedef(ctx, stmt, fd, indent):
     # units         0..1        
     derived_from = stmt.search_one('type')
     units = stmt.search_one('units')
+    default = stmt.search_one('default')
     description = stmt.search_one('description')
 
     # Find qualified name for this data type
@@ -615,9 +626,11 @@ def emit_typedef(ctx, stmt, fd, indent):
         emit_derived_from(ctx, derived_from, fd, indent)
     if units:
         emit_units(ctx, units, fd, indent)
+    if default:
+        emit_commented_default(ctx, default, fd, indent)
     emit_metadata(ctx, stmt, fd, indent)
 
-    handled = ['type', 'description', 'reference', 'units']
+    handled = ['type', 'description', 'reference', 'units', 'default']
     check_substmts(stmt, handled)
 
 
@@ -669,16 +682,15 @@ def emit_derived_from(ctx, stmt, fd, indent):
             count = count+1
         fd.write("%s#\n"
                  % (indent))
-        return
+    else:
+        # Regular type (not a union)
+        fd.write(
+            "%sderived_from: %s\n"
+            % (indent, tosca_type)
+        )
+        emit_constraints(ctx, stmt, fd, indent)
 
-    # Regular type (not a union)
-    fd.write(
-        "%sderived_from: %s\n"
-        % (indent, tosca_type)
-    )
-    emit_constraints(ctx, stmt, fd, indent)
-
-    handled = ['enum', 'length', 'range', 'pattern']
+    handled = ['enum', 'length', 'range', 'pattern', 'type']
     check_substmts(stmt, handled)
 
 
@@ -1241,6 +1253,12 @@ def emit_default(ctx, stmt, fd, indent):
         % (indent, stmt.arg)
     )
 
+def emit_commented_default(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# TOSCA doesn't support 'default' here\n%s# default: %s\n"
+        % (indent, indent, stmt.arg)
+    )
+
 def emit_when(ctx, stmt, fd, indent):
     fd.write(
         "%s# when: %s\n"
@@ -1328,7 +1346,7 @@ def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
         emit_must(ctx, must, fd, indent)
 
     handled = ['reference', 'description', 'type', 'units', 'config',
-               'min-elements', 'max-elements', 'must']
+               'min-elements', 'max-elements', 'must', 'when']
     check_substmts(stmt, handled)
 
 
@@ -1613,21 +1631,38 @@ def emit_type(ctx, stmt, fd, indent):
         # prefix if necessary (since TOSCA doesn't have locally
         # defined prefixes) and prepend tosca qualifier
         tosca_type = create_qualified_name(ctx, stmt.arg)
-    fd.write(
-        "%stype: %s\n"
-        % (indent, tosca_type)
-    )
-    # For leafrefs, emit path for reference
-    path = stmt.search_one("path")
-    if path:
-        emit_path(ctx, path, fd, indent)
-    # Emit commented fraction-digits
-    fraction_digits = stmt.search_one("fraction-digits")
-    if fraction_digits:
-        emit_fraction_digits(ctx, fraction_digits, fd, indent)
-    emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['bit', 'enum', 'fraction-digits', 'length', 'range', 'pattern', 'path']
+    # We don't have a good way to handle YANG unions. For now, just
+    # write out each of the types in the union and fix manually.
+    if tosca_type == 'union':
+        fd.write("%s# The YANG type is a union. Select one of the following options:\n"
+                 % (indent))
+        types = stmt.search('type')
+        count = 1
+        for typedef in types:
+            fd.write("%s# Option %d\n"
+                     % (indent, count))
+            emit_type(ctx, typedef, fd, indent)
+            count = count+1
+        fd.write("%s#\n"
+                 % (indent))
+    else:
+        # Regular type (not a union)
+        fd.write(
+            "%stype: %s\n"
+            % (indent, tosca_type)
+        )
+        # For leafrefs, emit path for reference
+        path = stmt.search_one("path")
+        if path:
+            emit_path(ctx, path, fd, indent)
+        # Emit commented fraction-digits
+        fraction_digits = stmt.search_one("fraction-digits")
+        if fraction_digits:
+            emit_fraction_digits(ctx, fraction_digits, fd, indent)
+        emit_constraints(ctx, stmt, fd, indent)
+
+    handled = ['bit', 'enum', 'fraction-digits', 'length', 'range', 'pattern', 'path', 'type']
     check_substmts(stmt, handled)
 
 
@@ -1983,16 +2018,16 @@ type_map = {
     'enumeration' : 'string',
     'identityref' : 'identityref',
     'instance' : 'instance',
-    'int8' : 'int8',
-    'int16' : 'int16',
-    'int32' : 'yang:int32',
-    'int64' : 'yang:int64',
+    'int8' : 'inet:int8',
+    'int16' : 'inet:int16',
+    'int32' : 'inet:int32',
+    'int64' : 'inet:int64',
     'leafref' : 'leafref',
     'string' : 'string',
-    'uint8' : 'yang:uint8',
-    'uint16' : 'yang:uint16',
-    'uint32' : 'yang:uint32',
-    'uint64' : 'yang:uint64',
+    'uint8' : 'inet:uint8',
+    'uint16' : 'inet:uint16',
+    'uint32' : 'inet:uint32',
+    'uint64' : 'inet:uint64',
     'union' : 'union',
 }
 
