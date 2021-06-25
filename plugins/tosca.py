@@ -854,8 +854,21 @@ def emit_in_range(ctx, stmt, fd, indent):
     # Parse range argument. Could include multiple ranges
     ranges = [(m[1], m[6]) for m in re_range_part.findall(stmt.arg)]
 
-    # Do we have more then one range argument?
-    if len(ranges) > 1:
+    # YANG range could be list of valid values. Check first to see
+    # how many of each we have.
+    num_valid_values = 0
+    num_ranges = 0
+    for (low, high) in ranges:
+        if high:
+            # This is a real range
+            num_ranges = num_ranges + 1
+        else:
+            # This is a valid value
+            num_valid_values = num_valid_values + 1
+            
+    # Do we have both valid values and ranges, or do we have more than
+    # one range argument?
+    if (num_valid_values and num_ranges) or (num_ranges > 1):
         fd.write(
             "%s# This is not (yet) valid TOSCA. FIX MANUALLY\n"
             % indent
@@ -866,15 +879,32 @@ def emit_in_range(ctx, stmt, fd, indent):
         )
         indent = indent + '  '
 
-    for (low, high) in ranges:
-        # Update values
-        if not high: high = low
-        if low == 'min': low = 'UNBOUNDED'
-        if high == 'max': high = 'UNBOUNDED'
+    # Write valid values:
+    if num_valid_values:
         fd.write(
-            "%s- in_range: [%s, %s]\n"
-            % (indent, low, high)
+            "%s- valid_values:\n"
+            % (indent)
         )
+        for (low, high) in ranges:
+            if not high:
+                fd.write(
+                    "%s- %s\n"
+                    % (indent + '  ', str(low))
+            )
+        
+    # Write ranges
+    if num_valid_values:
+        for (low, high) in ranges:
+            if high:
+                # Update values
+                if low == 'min': low = 'UNBOUNDED'
+                if high == 'max': high = 'UNBOUNDED'
+                fd.write(
+                    "%s- in_range: [%s, %s]\n"
+                    % (indent, low, high)
+                )
+
+    # All done
     handled = []
     check_substmts(stmt, handled)
 
