@@ -1114,7 +1114,7 @@ def emit_data_type(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    # Now add properties and attributes
+    # First add properties
     fd.write(
         "%sproperties:\n"
         % (indent)
@@ -1126,8 +1126,16 @@ def emit_data_type(ctx, stmt, fd, indent):
     if len(uses) > 1:
         emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
 
+    # Next add attributes.
+    fd.write("%s# TOSCA data types do not support attributes\n"
+             % (indent)
+             )
+    fd.write("%s# Enable attributes when converting to a node type\n"
+             % (indent)
+             )
+    
     fd.write(
-        "%sattributes:\n"
+        "%s# attributes:\n"
         % (indent)
     )
     emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
