@@ -893,7 +893,7 @@ def emit_in_range(ctx, stmt, fd, indent):
             )
         
     # Write ranges
-    if num_valid_values:
+    if num_ranges:
         for (low, high) in ranges:
             if high:
                 # Update values
