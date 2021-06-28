@@ -174,11 +174,12 @@ timestamp_regexp = re.compile(
 
 def emit_module(ctx, stmt, fd, indent):
 
-    # Sub-statements for the module statement:
+    # Sub-statements for the (sub)module statement:
     #
     # anydata       0..n        
     # anyxml        0..n        
     # augment       0..n        
+    # belongs-to    1           
     # choice        0..n        
     # contact       0..1        
     # container     0..n        
@@ -237,7 +238,7 @@ def emit_module(ctx, stmt, fd, indent):
     emit_data_types(ctx, stmt, fd, indent)
 
     # Sanity checking. To be removed later
-    handled = [ 'description', 'yang-version', 'feature',
+    handled = [ 'belongs-to', 'description', 'yang-version', 'feature',
                 'contact', 'organization', 'revision', 'reference',
                 'namespace', 'prefix', 'import', 'include',
                 'typedef', 'grouping', 'container', 'container', 'list', 'uses']
@@ -345,6 +346,16 @@ def emit_status(ctx, stmt, fd, indent):
         % (indent, stmt.arg)
     )
 
+def emit_belongs_to(ctx, stmt, fd, indent):
+    # Sub-statements for the belongs_to statement:
+    #
+    # prefix        1           
+    fd.write(
+        "%sbelongs-to: %s\n"
+        % (indent, stmt.arg)
+    )
+
+
 def emit_reference(ctx, stmt, fd, indent):
 
     # Check if text needs to be wrapped
@@ -366,6 +377,7 @@ def emit_metadata(ctx, stmt, fd, indent):
     yang_version = stmt.search_one('yang-version')
     organization = stmt.search_one('organization')
     contact = stmt.search_one('contact')
+    belongs_to = stmt.search_one('belongs-to')
     reference = stmt.search_one('reference')
     revisions = stmt.search('revision')
     features = stmt.search('feature')
@@ -389,6 +401,8 @@ def emit_metadata(ctx, stmt, fd, indent):
             emit_namespace(ctx, namespace, fd, indent)
         if prefix:
             emit_prefix(ctx, prefix, fd, indent)
+        if belongs_to:
+            emit_belongs_to(ctx, belongs_to, fd, indent)
         if len(revisions):
             emit_revisions(ctx, revisions, fd, indent)
         if reference: 
@@ -688,9 +702,13 @@ def emit_derived_from(ctx, stmt, fd, indent):
             "%sderived_from: %s\n"
             % (indent, tosca_type)
         )
+        # Emit commented fraction-digits
+        fraction_digits = stmt.search_one("fraction-digits")
+        if fraction_digits:
+            emit_fraction_digits(ctx, fraction_digits, fd, indent)
         emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['enum', 'length', 'range', 'pattern', 'type']
+    handled = ['enum', 'fraction-digits', 'length', 'range', 'pattern', 'type']
     check_substmts(stmt, handled)
 
 
@@ -1445,26 +1463,40 @@ def emit_list(ctx, stmt, fd, indent, prop=True):
         "%stype: list\n"
         % (indent)
     )
-    key = stmt.search_one('key')
-    if key:
-        emit_key(ctx, key, fd, indent)
     fd.write(
         "%sentry_schema: %s\n"
         % (indent, entry_schema)
     )
     emit_constraints(ctx, stmt, fd, indent)
+    # Emit commented key
+    key = stmt.search_one('key')
+    if key:
+        emit_key(ctx, key, fd, indent)
+    # Emit commented unique
+    unique = stmt.search_one('unique')
+    if unique:
+        emit_unique(ctx, unique, fd, indent)
+    # Emit commented ordered_by
+    ordered_by = stmt.search_one('ordered-by')
+    if ordered_by:
+        emit_ordered_by(ctx, ordered_by, fd, indent)
 
-    handled = ['reference', 'description', 'config',
-               'typedef', 'container', 'grouping', 'list', 'uses', 'key',
+    handled = ['reference', 'description', 'config', 'ordered-by',
+               'typedef', 'container', 'grouping', 'list', 'uses', 'key', 'unique',
                'leaf', 'leaf-list', 'min-elements', 'max-elements', 'when', 'must']
     check_substmts(stmt, handled)
 
 
-def    emit_key(ctx, stmt, fd, indent):
-    # Sub-statements for the key statement:
-    #
+def emit_key(ctx, stmt, fd, indent):
     fd.write(
         "%s# key: %s\n"
+        % (indent, stmt.arg)
+    )
+
+
+def emit_ordered_by(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# ordered-by: %s\n"
         % (indent, stmt.arg)
     )
 
@@ -1716,6 +1748,11 @@ def emit_fraction_digits(ctx, stmt, fd, indent):
         % (indent, stmt.arg)
     )
     
+def  emit_unique(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# unique: %s\n"
+        % (indent, stmt.arg)
+    )
 
 def    emit_augment(ctx, stmt, fd, indent, prop=True):
     # Sub-statements for the augment statement:
@@ -1815,12 +1852,6 @@ def    emit_revision_date(ctx, stmt, fd, indent):
     #
     print('revision-date')
 
-def    emit_belongs_to(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    # prefix        1           
-    print('belongs-to')
-
 def    emit_extension(ctx, stmt, fd, indent):
     # Sub-statements for the extension statement:
     #
@@ -1886,11 +1917,6 @@ def    emit_presence(ctx, stmt, fd, indent):
     #
     print('presence')
 
-def    emit_ordered_by(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    print('ordered-by')
-
 def    emit_error_message(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
@@ -1910,11 +1936,6 @@ def    emit_modifier(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('modifier')
-
-def    emit_unique(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    print('unique')
 
 def    emit_anydata(ctx, stmt, fd, indent):
     # Sub-statements for the anydata statement:
