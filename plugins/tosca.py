@@ -50,12 +50,6 @@ class ToscaPlugin(plugin.PyangPlugin):
                                  dest='tosca_debug',
                                  action="store_true",
                                  help='TOSCA debug'),
-            optparse.make_option('--tosca-qualifier',
-                                 dest='tosca_qualifier',
-                                 action="store",
-                                 type=str,
-                                 default=None,
-                                 help='Qualifier to be pre-pended to generated TOSCA data types'),
             optparse.make_option('--camel-case',
                                  dest='camel_case',
                                  action="store_true",
@@ -622,11 +616,8 @@ def emit_typedef(ctx, stmt, fd, indent):
     default = stmt.search_one('default')
     description = stmt.search_one('description')
 
-    # Find qualified name for this data type
-    if ctx.opts.tosca_qualifier:
-        name = ctx.opts.tosca_qualifier + '.' + stmt.arg
-    else:
-        name = stmt.arg
+    # Find name for this data type
+    name = stmt.arg
 
     # # Write out data type
     fd.write(
@@ -712,7 +703,7 @@ def emit_derived_from(ctx, stmt, fd, indent):
     check_substmts(stmt, handled)
 
 
-def create_qualified_name(ctx, type_string):
+def create_qualified_name(ctx, type_string, qualifier=None):
 
     # Separate on first colon
     type_parts = type_string.split(':', 1)
@@ -733,8 +724,8 @@ def create_qualified_name(ctx, type_string):
         type_string = type_parts[1]
 
     # Return qualified name for this data type
-    if ctx.opts.tosca_qualifier:
-        name = ctx.opts.tosca_qualifier + '.' + type_string
+    if qualifier:
+        name = qualifier + ':' + type_string
     else:
         name = type_string
     return name
@@ -1104,10 +1095,7 @@ def emit_data_type(ctx, stmt, fd, indent):
     emit_data_types(ctx, stmt, fd, indent)
 
     # Find qualified name for this data type
-    if ctx.opts.tosca_qualifier:
-        name = ctx.opts.tosca_qualifier + '.' + stmt.arg
-    else:
-        name = stmt.arg
+    name = stmt.arg
 
     # Write out a data type definition for this statement
     fd.write(
@@ -1205,34 +1193,49 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
         print("%s: uses(%s) not found" % (statements.mk_path_str(stmt, True), use.arg) )
         return
 
-    # Just emit the properties in this grouping
+    # Just emit the properties in this grouping. Prepend namespace
+    # prefix  if necessary
+    prefix = None
+    type_parts = use.arg.split(':', 1)
+    if (len(type_parts) == 2):
+        # The name has a namespace prefix
+        try:
+            if type_parts[0] != ctx.local_prefix:
+                # Prefix doesn't match local prefix. OK to use the
+                # prefix in the name.
+                prefix = type_parts[0]
+        except AttributeError:
+            # No local prefix in context. OK to use the prefix in the
+            # name.
+            prefix = type_parts[0]
+    
     # print("%s: uses(%s)" % (statements.mk_path_str(stmt, True), use.arg) )
-    emit_properties(ctx, use.i_grouping, fd, indent, prop=prop)
+    emit_properties(ctx, use.i_grouping, fd, indent, prop=prop, qualifier=prefix)
         
 
-def emit_properties(ctx, stmt, fd, indent, prop=True):
+def emit_properties(ctx, stmt, fd, indent, prop=True, qualifier=None):
 
     # Try to maintain the order in which properties are defined by
     # iterating over list of sub-statements
     for sub in stmt.substmts:
         if sub.keyword == 'leaf':
-            emit_leaf(ctx, sub, fd, indent, prop=prop)
+            emit_leaf(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
         elif sub.keyword == 'leaf-list':
-            emit_leaf_list(ctx, sub, fd, indent, prop=prop)
+            emit_leaf_list(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
         elif sub.keyword == 'list':
-            emit_list(ctx, sub, fd, indent, prop=prop)
+            emit_list(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
         elif sub.keyword == 'container':
-            emit_container(ctx, sub, fd, indent, prop=prop)
+            emit_container(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
         elif sub.keyword == 'choice':
-            emit_choice(ctx, sub, fd, indent, prop=prop)
+            emit_choice(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
         elif sub.keyword == 'augment':
-            emit_augment(ctx, sub, fd, indent, prop=prop)
+            emit_augment(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
         else:
             # This statement does not define a property
             pass
 
 
-def emit_leaf(ctx, stmt, fd, indent, prop=True):
+def emit_leaf(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Sub-statements for the leaf statement:
     #
     # config        0..1        
@@ -1269,7 +1272,7 @@ def emit_leaf(ctx, stmt, fd, indent, prop=True):
     emit_metadata(ctx, stmt, fd, indent)
     type = stmt.search_one('type')
     if type:
-        emit_type(ctx, type, fd, indent)
+        emit_type(ctx, type, fd, indent, qualifier=qualifier)
     if not is_attr:
         mandatory = stmt.search_one('mandatory')
         emit_mandatory(ctx, mandatory, fd, indent)
@@ -1343,7 +1346,7 @@ def emit_must(ctx, stmt, fd, indent):
     check_substmts(stmt, handled)
 
 
-def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
+def emit_leaf_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Sub-statements for the leaf-list statement:
     #
     # config        0..1        
@@ -1389,7 +1392,7 @@ def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
             "%sentry_schema:\n"
             % (indent)
         )
-        emit_type(ctx, type, fd, indent + '  ')
+        emit_type(ctx, type, fd, indent + '  ', qualifier=qualifier)
     units = stmt.search_one('units')
     if units:
         emit_units(ctx, units, fd, indent)
@@ -1406,7 +1409,7 @@ def emit_leaf_list(ctx, stmt, fd, indent, prop=True):
     check_substmts(stmt, handled)
 
 
-def emit_list(ctx, stmt, fd, indent, prop=True):
+def emit_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
 
     # Sub-statements for the list statement:
     #
@@ -1441,8 +1444,8 @@ def emit_list(ctx, stmt, fd, indent, prop=True):
     if is_attr == prop: return
 
     # Find qualified entry_schema for this list
-    if ctx.opts.tosca_qualifier:
-        entry_schema = ctx.opts.tosca_qualifier + '.' + stmt.arg
+    if qualifier:
+        entry_schema = qualifier + ':' + stmt.arg
     else:
         entry_schema = stmt.arg
 
@@ -1501,7 +1504,7 @@ def emit_ordered_by(ctx, stmt, fd, indent):
     )
 
 
-def emit_container(ctx, stmt, fd, indent, prop=True):
+def emit_container(ctx, stmt, fd, indent, prop=True, qualifier=None):
 
     # Sub-statements for the container statement:
     #
@@ -1532,8 +1535,8 @@ def emit_container(ctx, stmt, fd, indent, prop=True):
     if is_attr == prop: return
 
     # Find qualified type name for this container
-    if ctx.opts.tosca_qualifier:
-        type_name = ctx.opts.tosca_qualifier + '.' + stmt.arg
+    if qualifier:
+        type_name = qualifier + ':' + stmt.arg
     else:
         type_name = stmt.arg
 
@@ -1564,7 +1567,7 @@ def emit_container(ctx, stmt, fd, indent, prop=True):
     check_substmts(stmt, handled)
 
 
-def emit_choice(ctx, stmt, fd, indent, prop=True):
+def emit_choice(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Sub-statements for the choice statement:
     #
     # anydata       0..n        
@@ -1679,7 +1682,7 @@ def emit_case(ctx, stmt, fd, indent):
     check_substmts(stmt, handled)
 
 
-def emit_type(ctx, stmt, fd, indent):
+def emit_type(ctx, stmt, fd, indent, qualifier=None):
 
     # Sub-statements for the type statement:
     #
@@ -1700,7 +1703,7 @@ def emit_type(ctx, stmt, fd, indent):
         # Not a built-in type. Use type name as is, but strip local
         # prefix if necessary (since TOSCA doesn't have locally
         # defined prefixes) and prepend tosca qualifier
-        tosca_type = create_qualified_name(ctx, stmt.arg)
+        tosca_type = create_qualified_name(ctx, stmt.arg, qualifier=qualifier)
 
     # We don't have a good way to handle YANG unions. For now, just
     # write out each of the types in the union and fix manually.
@@ -1775,10 +1778,7 @@ def    emit_augment(ctx, stmt, fd, indent, prop=True):
     # when          0..1        
 
     # Find qualified type name for this augment
-    if ctx.opts.tosca_qualifier:
-        type_name = ctx.opts.tosca_qualifier + '.' + stmt.arg
-    else:
-        type_name = stmt.arg
+    type_name = stmt.arg
 
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
