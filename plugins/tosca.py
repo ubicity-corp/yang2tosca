@@ -1560,8 +1560,11 @@ def emit_container(ctx, stmt, fd, indent, prop=True, qualifier=None):
     must = stmt.search_one('must')
     if must:
         emit_must(ctx, must, fd, indent)
+    presence = stmt.search_one('presence')
+    if presence:
+        emit_presence(ctx, presence, fd, indent)
 
-    handled = ['reference', 'description', 'config',
+    handled = ['reference', 'description', 'config', 'presence',
                'typedef', 'container', 'grouping', 'list', 'uses',
                'leaf', 'leaf-list', 'when', 'must']
     check_substmts(stmt, handled)
@@ -1764,6 +1767,12 @@ def emit_type(ctx, stmt, fd, indent, qualifier=None):
     check_substmts(stmt, handled)
 
 
+def emit_presence(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# presence: %s\n"
+        % (indent, stmt.arg)
+    )
+
 def emit_path(ctx, stmt, fd, indent):
     fd.write(
         "%s# path: %s\n"
@@ -1936,11 +1945,6 @@ def    emit_config(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('config')
-
-def    emit_presence(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    print('presence')
 
 def    emit_error_message(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
