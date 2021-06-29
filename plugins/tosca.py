@@ -1592,8 +1592,16 @@ def emit_choice(ctx, stmt, fd, indent, prop=True, qualifier=None):
     is_attr = (config != None) and (config.arg=='false')
     if is_attr == prop: return
 
-    # Get list of cases
+    # Get list of cases or list of leafs. If we have a list of leafs,
+    # each leaf is equivalate to a case with a single leaf node.
     cases = stmt.search('case')
+    leafs = stmt.search('leaf')
+    if len(cases):
+        options = cases
+    elif len(leafs):
+        options = leafs
+    else:
+        options = list()
 
     # Define a property for the choice
     if ctx.opts.camel_case:
@@ -1631,21 +1639,38 @@ def emit_choice(ctx, stmt, fd, indent, prop=True, qualifier=None):
         % (indent)
     )
     indent = indent + '  '
-    for case in cases:
+    for option in options:
         fd.write(
             "%s- %s\n"
-            % (indent, case.arg)
+            % (indent, option.arg)
         )
         
-    # Define properties for each of the cases
+    # Define properties for each of the options.
     indent = orig_indent
+    fd.write(
+        "%s# Select one of the following options\n%s#\n"
+        % (indent, indent)
+    )
     for case in cases:
-        emit_case(ctx, case, fd, indent)
-    handled = ['case', 'config', 'default', 'description', 'mandatory' ]
+        emit_case(ctx, case, fd, indent, qualifier=qualifier)
+    # Emit leafs if we don't have an explicit list of cases
+    for leaf in leafs:
+        # Add descriptive commentary 
+        fd.write(
+            "%s# The following properties are used in case of '%s'\n"
+            % (indent, leaf.arg)
+        )
+        emit_leaf(ctx, leaf, fd, indent, qualifier=qualifier)
+    fd.write(
+        "%s# End of options\n%s#\n"
+        % (indent, indent)
+    )
+
+    handled = ['case', 'config', 'default', 'description', 'leaf', 'mandatory' ]
     check_substmts(stmt, handled)
 
 
-def emit_case(ctx, stmt, fd, indent):
+def emit_case(ctx, stmt, fd, indent, qualifier=None):
     # Sub-statements for the case statement:
     #
     # anydata       0..n        
@@ -1676,7 +1701,7 @@ def emit_case(ctx, stmt, fd, indent):
                 % (indent, line)
         )
     # Continue emitting properties
-    emit_properties(ctx, stmt, fd, indent)
+    emit_properties(ctx, stmt, fd, indent, qualifier=qualifier)
 
     handled = ['leaf', 'leaf-list', 'list', 'container', 'choice', 'description' ]
     check_substmts(stmt, handled)
