@@ -218,8 +218,6 @@ def emit_module(ctx, stmt, fd, indent):
     emit_metadata(ctx, stmt, fd, indent)
     fd.write("\n")
 
-    # Emit namespace and prefix
-
     # Emit imports and includes
     emit_imports_and_includes(ctx, stmt, fd, indent)
     fd.write("\n")
@@ -274,13 +272,25 @@ def emit_data_types(ctx, stmt, fd, indent):
             emit_data_type(ctx, augment, fd, indent)
             fd.write("\n")
 
-    # Finally, handle type definitions underneath choice entries
+    # Handle type definitions underneath choice entries
     choices = stmt.search('choice')
     for choice in choices:
         cases = choice.search('case')
         for case in cases:
             emit_data_types(ctx, case, fd, indent)
 
+    # Handle type definitions based on 'augment' statements
+    augmentations = stmt.search('augment')
+    for augment in augmentations:
+        emit_augmented_type(ctx, augment, fd, indent)
+
+def emit_augmented_type(ctx, stmt, fd, indent):
+    for key in dir(stmt):
+        try:
+            print(key + " = " + str(getattr(stmt, key)))
+        except AttributeError as e:
+            print(str(e))
+    
     
 def wrap_text(text_string):
 
