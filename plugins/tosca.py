@@ -284,14 +284,117 @@ def emit_data_types(ctx, stmt, fd, indent):
     for augment in augmentations:
         emit_augmented_type(ctx, augment, fd, indent)
 
+
 def emit_augmented_type(ctx, stmt, fd, indent):
+    # Sub-statements for the augment statement:
+    #
+    # action        0..n        
+    # anydata       0..n        
+    # anyxml        0..n        
+    # case          0..n        
+    # choice        0..n        
+    # container     0..n        
+    # description   0..1        
+    # if-feature    0..n        
+    # leaf          0..n        
+    # leaf-list     0..n        
+    # list          0..n        
+    # notification  0..n        
+    # reference     0..1        
+    # status        0..1        
+    # uses          0..n        
+    # when          0..1        
+
+    """
+    print("Augment statement")
+    print_statement(stmt)
+    print("=======================================================")
+    print("Augmented statement")
+    print_statement(stmt.i_target_node)
+    """
+
+    # First, recurse to make sure all other typedefs, containers, and
+    # groupings defined underneath this statement are reflected in
+    # top-level data type
+    emit_data_types(ctx, stmt, fd, indent)
+
+    # Find qualified name for this data type
+    name = stmt.i_target_node.arg
+
+    # Write out a data type definition for this statement
+    fd.write(
+        "%s%s:\n"
+        % (indent, name)
+    )
+    indent = indent + '  '
+    description = stmt.search_one('description')
+    if description:
+        emit_description(ctx, description, fd, indent)
+
+    # Find type from which this type derives
+    path = stmt.arg.split('/')
+    print(str(path))
+    if path[0]:
+        print("Augment does not specify an absolute path")
+    derived_from = create_qualified_name(ctx, path[1])
+    fd.write(
+        "%sderived_from: %s\n"
+        % (indent, derived_from)
+    )
+
+    emit_metadata(ctx, stmt, fd, indent)
+
+    # Emit constraints
+    when = stmt.search_one('when')
+    if when:
+        emit_when(ctx, when, fd, indent)
+    must = stmt.search_one('must')
+    if must:
+        emit_must(ctx, must, fd, indent)
+
+    # First add properties
+    fd.write(
+        "%sproperties:\n"
+        % (indent)
+    )
+    emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
+
+    # If we have uses statements, we'll just add the properties from
+    # the grouping specified in each 'uses' statement
+    uses = stmt.search('uses')
+    if len(uses):
+        emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
+
+    # Next add attributes.
+    fd.write("%s# TOSCA data types do not support attributes\n"
+             % (indent)
+             )
+    fd.write("%s# Enable attributes when converting to a node type\n"
+             % (indent)
+             )
+    
+    fd.write(
+        "%s# attributes:\n"
+        % (indent)
+    )
+    emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
+
+    # If we have uses statements, we'll just add the attributes from
+    # the grouping specified in each 'uses' statement
+    if len(uses):
+        emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
+
+    # Sanity checking. To be removed later
+    handled = []
+    check_substmts(stmt, handled)
+
+def print_statement(stmt):
     for key in dir(stmt):
         try:
             print(key + " = " + str(getattr(stmt, key)))
-        except AttributeError as e:
-            print(str(e))
-    
-    
+        except AttributeError:
+            pass
+        
 def wrap_text(text_string):
 
     # First, check to see if the text was already formatted. We do
