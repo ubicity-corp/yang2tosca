@@ -283,6 +283,7 @@ def emit_data_types(ctx, stmt, fd, indent):
     augmentations = stmt.search('augment')
     for augment in augmentations:
         emit_augmented_type(ctx, augment, fd, indent)
+        fd.write("\n")
 
 
 def emit_augmented_type(ctx, stmt, fd, indent):
@@ -330,6 +331,10 @@ def emit_augmented_type(ctx, stmt, fd, indent):
     description = stmt.search_one('description')
     if description:
         emit_description(ctx, description, fd, indent)
+
+    if_feature = stmt.search_one('if-feature')
+    if if_feature:
+        emit_if_feature(ctx, if_feature, fd, indent)
 
     # Find type from which this type derives
     path = stmt.arg.split('/')
@@ -385,7 +390,7 @@ def emit_augmented_type(ctx, stmt, fd, indent):
 
     # Sanity checking. To be removed later
     handled = ['case', 'choice', 'reference', 'description', 
-               'container', 'list', 'uses',
+               'container', 'list', 'uses', 'if-feature',
                'leaf', 'leaf-list', 'when', 'must']
     check_substmts(stmt, handled)
 
@@ -1604,6 +1609,13 @@ def emit_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
     check_substmts(stmt, handled)
 
 
+def emit_if_feature(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# if-feature: %s\n"
+        % (indent, stmt.arg)
+    )
+
+
 def emit_key(ctx, stmt, fd, indent):
     fd.write(
         "%s# key: %s\n"
@@ -2019,11 +2031,6 @@ def    emit_yin_element(ctx, stmt, fd, indent):
     # Sub-statements for the module statement:
     #
     print('yin-element')
-
-def    emit_if_feature(ctx, stmt, fd, indent):
-    # Sub-statements for the module statement:
-    #
-    print('if-feature')
 
 def    emit_identity(ctx, stmt, fd, indent):
     # Sub-statements for the identity statement:
