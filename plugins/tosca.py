@@ -230,7 +230,7 @@ def emit_module(ctx, stmt, fd, indent):
     emit_data_types(ctx, stmt, fd, indent)
 
     # Sanity checking. To be removed later
-    handled = [ 'belongs-to', 'description', 'yang-version', 'feature',
+    handled = [ 'augment', 'belongs-to', 'description', 'yang-version', 'feature',
                 'contact', 'organization', 'revision', 'reference',
                 'namespace', 'prefix', 'import', 'include',
                 'typedef', 'grouping', 'container', 'container', 'list', 'uses']
@@ -333,10 +333,9 @@ def emit_augmented_type(ctx, stmt, fd, indent):
 
     # Find type from which this type derives
     path = stmt.arg.split('/')
-    print(str(path))
     if path[0]:
         print("Augment does not specify an absolute path")
-    derived_from = create_qualified_name(ctx, path[1])
+    derived_from = create_qualified_name(ctx, path[-1])
     fd.write(
         "%sderived_from: %s\n"
         % (indent, derived_from)
@@ -385,7 +384,9 @@ def emit_augmented_type(ctx, stmt, fd, indent):
         emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
 
     # Sanity checking. To be removed later
-    handled = []
+    handled = ['case', 'choice', 'reference', 'description', 
+               'container', 'list', 'uses',
+               'leaf', 'leaf-list', 'when', 'must']
     check_substmts(stmt, handled)
 
 def print_statement(stmt):
