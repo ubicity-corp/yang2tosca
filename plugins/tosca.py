@@ -423,12 +423,21 @@ def emit_text_string(ctx, lines, fd, indent):
     if len(lines) > 1 or (':' in lines[0]):
         # Emit folding character
         fd.write(">-\n")
-        # Emit individual lines
+        # Emit individual lines. Make sure the first line is indented
+        # correctly.
+        first = True
         for line in lines:
-            fd.write(
-                "%s%s\n"
-                % (indent + '  ', line)
-            )
+            if first:
+                fd.write(
+                    "%s%s\n"
+                    % (indent + '  ', line.lstrip())
+                )
+                first = False
+            else:
+                fd.write(
+                    "%s%s\n"
+                    % (indent + '  ', line.lstrip())
+                )
     else:
         fd.write("%s\n"
                  % lines[0]
