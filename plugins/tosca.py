@@ -420,7 +420,7 @@ def emit_text_string(ctx, lines, fd, indent):
     # multiple lines or if it includes a colon character (which would
     # violate YAML syntax)
 
-    if len(lines) > 1 or (':' in lines[0]):
+    if len(lines) > 1 or (':' in lines[0]) or ('\'' in lines[0]):
         # Emit folding character
         fd.write(">-\n")
         # Emit individual lines. Make sure the first line is indented
@@ -2236,6 +2236,7 @@ type_map = {
     'enumeration' : 'string',
     'identityref' : 'identityref',
     'instance' : 'instance',
+    'instance-identifier' : 'integer # instance-identifier',
     'int8' : 'inet:int8',
     'int16' : 'inet:int16',
     'int32' : 'inet:int32',
