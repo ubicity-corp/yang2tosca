@@ -28,9 +28,6 @@ class ToscaPlugin(plugin.PyangPlugin):
 
         `fmts` is a dict which maps the format name string to a plugin
         instance.
-
-        Override this method and update `fmts` with the output format
-        name.
         """
         fmts['tosca'] = self
 
@@ -38,11 +35,7 @@ class ToscaPlugin(plugin.PyangPlugin):
 
 
     def add_opts(self, optparser):
-        """Add command line options to the pyang program.
-
-        Override this method and add the plugin related options as an
-        option group.
-
+        """Add tosca-specific command line options to the pyang program.
         """
 
         optlist = [
@@ -60,74 +53,68 @@ class ToscaPlugin(plugin.PyangPlugin):
         group.add_options(optlist)
         return
 
-    ## library methods
+## Library methods
 
     def setup_ctx(self, ctx):
-        """Modify the Context at setup time.  Called for all plugins.
+        """Modify the Context before the module repository is accessed (This
+        is done for all plugins).
 
-        Override this method to modify the Context before the module
-        repository is accessed.
         """
         if ctx.opts.tosca_debug:
-            print("setting up context for all plugins")
+            print("Setting up context for all plugins")
+        # Do nothing
         ctx.opts.stmts = None
         return
 
     def setup_fmt(self, ctx):
         """Modify the Context at setup time.  Called for the selected plugin.
-
-        Override this method to modify the Context before the module
-        repository is accessed.
         """
         if ctx.opts.tosca_debug:
-            print("setting up context for the TOSCA plugin")
+            print("Setting up context for the TOSCA plugin")
         ctx.implicit_errors = False
         return
 
     def pre_load_modules(self, ctx):
         """Called for the selected plugin, before any modules are loaded"""
         if ctx.opts.tosca_debug:
-            print("loading modules for TOSCA")
+            print("Loading modules for TOSCA")
         return
 
     def pre_validate_ctx(self, ctx, modules):
         """Called for all plugins, before the modules are validated"""
         if ctx.opts.tosca_debug:
-            print("before validating for all plugins")
+            print("Before validating for all plugins")
         return
 
     def pre_validate(self, ctx, modules):
         """Called for the selected plugin, before the modules are validated"""
         if ctx.opts.tosca_debug:
-            print("before validating for TOSCA plugin")
+            print("Before validating for TOSCA plugin")
         return
 
     def post_validate(self, ctx, modules):
         """Called for the selected plugin, after the modules
         have been validated"""
         if ctx.opts.tosca_debug:
-            print("done validating for TOSCA plugin")
+            print("Done validating for TOSCA plugin")
         return
 
     def post_validate_ctx(self, ctx, modules):
         """Called for all plugins, after the modules
         have been validated"""
         if ctx.opts.tosca_debug:
-            print("done validating for plugins")
+            print("Done validating for plugins")
         return
 
     def emit(self, ctx, modules, fd):
-        """Produce the plugin output.
-
-        Override this method to perform the output conversion.
-        `writef` is a function that takes one string to print as argument.
+        """Produce the tosca output.
 
         Raise error.EmitError on failure.
         """
         if ctx.opts.tosca_debug:
             logging.basicConfig(level=logging.DEBUG)
 
-        # Check modules
+        # Write all modules
         for module in modules:
             emit_module(ctx, module, fd, '')
 
@@ -136,7 +123,7 @@ class ToscaPlugin(plugin.PyangPlugin):
 IETF_NAMESPACE = 'org.ietf:1.0'
 IETF_NAMESPACE_PREFIX = 'inet'
 
-# Regular expressions to parse YANG range and length
+# Regular expressions for parsing YANG range and length
 # expressions. Copied from pyang's syntax.py file
 
 length_str = '((min|max|[0-9]+)\s*' \
@@ -151,7 +138,7 @@ range_expr = range_str + '(\|\s*' + range_str + ')*'
 re_range_part = re.compile(range_str)
 
 
-# Regular expressions to parse YAML timestamps. Copied from
+# Regular expressions for parsing YAML timestamps. Copied from
 # constructor.py in ruamel package
 timestamp_regexp = re.compile(
     u'''^(?P<year>[0-9][0-9][0-9][0-9])
@@ -167,8 +154,16 @@ timestamp_regexp = re.compile(
 
 
 def emit_module(ctx, stmt, fd, indent):
+    """Convert a YANG module to TOSCA by (recursively) converting each of
+    the YANG statements in the YANG module to TOSCA.
+
+    Note that for each YANG statement, we keep track of which
+    sub-statements are handled by 'yang2tosca', and we inform the user
+    about any sub-statements that are not yet handled.
+    """
 
     # Sub-statements for the (sub)module statement:
+    # (See https://datatracker.ietf.org/doc/html/rfc7950)
     #
     # anydata       0..n        
     # anyxml        0..n        
@@ -230,40 +225,66 @@ def emit_module(ctx, stmt, fd, indent):
     emit_data_types(ctx, stmt, fd, indent)
 
     # Sanity checking. To be removed later
-    handled = [ 'augment', 'belongs-to', 'description', 'yang-version', 'feature',
-                'contact', 'organization', 'revision', 'reference',
-                'namespace', 'prefix', 'import', 'include',
-                'typedef', 'grouping', 'container', 'container', 'list', 'uses']
+    handled = [
+        'augment',
+        'belongs-to',
+        'contact',
+        'container',
+        'description',
+        'feature',
+        'grouping',
+        'import',
+        'include',
+        'list',
+        'namespace',
+        'organization',
+        'prefix',
+        'reference',
+        'revision',
+        'typedef',
+        'uses',
+        'yang-version'
+    ]
     check_substmts(stmt, handled)
 
 
 def emit_data_types(ctx, stmt, fd, indent):
+    """Emit TOSCA data type definitions for each of the following YANG
+    statements:
+    - typedef
+    - grouping
+    - container
+    - list (to be used as the entry_schema for the list)
+    - choice
+    - augment (at the module level)
+    - augment (within uses statement)
+    """
 
-    # Emit data type definitions for typedefs
+    # Emit data type definitions for 'typedef' statements
     typedefs = stmt.search('typedef')
     for typedef in typedefs:
         emit_typedef(ctx, typedef, fd, indent)
         fd.write("\n")
 
-    # Emit data type definitions for groupings
+    # Emit data type definitions for 'grouping' statements
     groupings = stmt.search('grouping')
     for grouping in groupings:
         emit_grouping(ctx, grouping, fd, indent)
         fd.write("\n")
 
-    # Emit data type definitions for containers
+    # Emit data type definitions for 'container' statements
     containers = stmt.search('container')
     for container in containers:
         emit_data_type(ctx, container, fd, indent)
         fd.write("\n")
 
-    # Emit data type definitions for list entries
+    # Emit data type definitions for 'list' statements
     lists = stmt.search('list')
     for lst in lists:
         emit_data_type(ctx, lst, fd, indent)
         fd.write("\n")
 
-    # Emit data type definitions underneath uses entries
+    # Emit data type definitions underneath 'uses' statements
     usess = stmt.search('uses')
     for uses in usess:
         augments = uses.search('augment')
@@ -272,7 +293,7 @@ def emit_data_types(ctx, stmt, fd, indent):
             emit_data_type(ctx, augment, fd, indent)
             fd.write("\n")
 
-    # Handle type definitions underneath choice entries
+    # Handle type definitions underneath 'choice' statements 
     choices = stmt.search('choice')
     for choice in choices:
         cases = choice.search('case')
@@ -286,7 +307,188 @@ def emit_data_types(ctx, stmt, fd, indent):
         fd.write("\n")
 
 
+def emit_typedef(ctx, stmt, fd, indent):
+    """Create a TOSCA data type definition from a YANG 'typedef'
+    statement"""
+
+    # Sub-statements for the typedef statement:
+    #
+    # default       0..1        
+    # description   0..1        
+    # reference     0..1        
+    # status        0..1        
+    # type          1           
+    # units         0..1        
+
+    derived_from = stmt.search_one('type')
+    units = stmt.search_one('units')
+    default = stmt.search_one('default')
+    description = stmt.search_one('description')
+
+    # Find name for this data type
+    name = stmt.arg
+
+    # # Write out data type
+    fd.write(
+        "%s%s:\n"
+        % (indent, name)
+    )
+    indent = indent + '  '
+    if description:
+        emit_description(ctx, description, fd, indent)
+    if derived_from:
+        emit_derived_from(ctx, derived_from, fd, indent)
+    if units:
+        emit_units(ctx, units, fd, indent)
+    if default:
+        emit_commented_default(ctx, default, fd, indent)
+    emit_metadata(ctx, stmt, fd, indent)
+
+    handled = [
+        'default',
+        'description',
+        'reference',
+        'type',
+        'units',
+    ]
+    check_substmts(stmt, handled)
+
+
+def emit_grouping(ctx, stmt, fd, indent):
+    """Create a TOSCA data type definition from a YANG 'grouping'
+    statemen. This methods is just a wrapper around emit_data_type so
+    we can check_substmts here.
+    """
+
+    # Sub-statements for the grouping statement:
+    #
+    # action        0..n        
+    # anydata       0..n        
+    # anyxml        0..n        
+    # choice        0..n        
+    # container     0..n        
+    # description   0..1        
+    # grouping      0..n        
+    # leaf          0..n        
+    # leaf-list     0..n        
+    # list          0..n        
+    # notification  0..n        
+    # reference     0..1        
+    # status        0..1        
+    # typedef       0..n        
+    # uses          0..n        
+
+    emit_data_type(ctx, stmt, fd, indent)
+
+    handled = [
+        'choice',
+        'container',
+        'description',
+        'grouping',
+        'leaf',
+        'leaf-list',
+        'list',
+        'reference',
+        'typedef',
+        'uses'
+    ]
+    check_substmts(stmt, handled)
+
+
+def emit_data_type(ctx, stmt, fd, indent):
+    """Create a TOSCA data type definition from a YANG statement. This
+    method is used for 'container', 'grouping', and 'list'
+    statements. These statements are different from other YANG
+    statements since they result in two different types of TOSCA
+    entities:
+
+    - They result in a corresponding TOSCA data type
+    - They result in a corresponding TOSCA property definition (within
+      some other data type definition)
+
+    As a result, these YANG statements are processed twice (in two
+    different passes). Rather than calling 'check_substmt' here, we
+    call it in the method that emits the property definition.
+    """
+
+    # First, recurse to make sure all other typedefs, containers,
+    # lists, groupings, choices, and augments defined underneath this
+    # statement are reflected into top-level TOSCA data type
+    # definitions.
+    emit_data_types(ctx, stmt, fd, indent)
+
+    # Find the name for this data type
+    name = stmt.arg
+
+    # Write out a data type definition for this statement
+    fd.write(
+        "%s%s:\n"
+        % (indent, name)
+    )
+    indent = indent + '  '
+    description = stmt.search_one('description')
+    if description:
+        emit_description(ctx, description, fd, indent)
+    emit_metadata(ctx, stmt, fd, indent)
+
+    # If we have a single 'uses' statement, we use the grouping name
+    # specified in this 'uses' statement as the name of the TOSCA
+    # parent type
+    uses = stmt.search('uses')
+    if len(uses) == 1:
+        emit_uses_derived_from(ctx, stmt, uses, fd, indent)
+    # Emit constraints
+    when = stmt.search_one('when')
+    if when:
+        emit_when(ctx, when, fd, indent)
+    must = stmt.search_one('must')
+    if must:
+        emit_must(ctx, must, fd, indent)
+
+    # First add property definitions
+    fd.write(
+        "%sproperties:\n"
+        % (indent)
+    )
+    emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
+
+    # If we have more than one uses statement, we'll just copy the
+    # property definitions from the grouping specified in each 'uses'
+    # statement
+    if len(uses) > 1:
+        emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
+
+    # Next add attribute definitions (marked using "config false" in
+    # YANG). Note that TOSCA data type definitions do not support
+    # attributes. We just mark which property definitions need to be
+    # converted to attribute definitions when TOSCA data types are
+    # converted to node types.
+    fd.write("%s# TOSCA data types do not support attributes\n"
+             % (indent)
+             )
+    fd.write("%s# Enable attributes when converting to a node type\n"
+             % (indent)
+             )
+    
+    fd.write(
+        "%s# attributes:\n"
+        % (indent)
+    )
+    emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
+
+    # If we have more than one uses statement, we'll just add the
+    # attributes from the grouping specified in each 'uses' statement
+    if len(uses) > 1:
+        emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
+
+
 def emit_augmented_type(ctx, stmt, fd, indent):
+    """Create a TOSCA data type definition from a YANG 'augment' statement
+    in the top-level module. This method creates a TOSCA data type
+    that derives from the TOSCA data type that corresponds to the
+    entity being augmented.
+    """
+
     # Sub-statements for the augment statement:
     #
     # action        0..n        
@@ -305,14 +507,6 @@ def emit_augmented_type(ctx, stmt, fd, indent):
     # status        0..1        
     # uses          0..n        
     # when          0..1        
-
-    """
-    print("Augment statement")
-    print_statement(stmt)
-    print("=======================================================")
-    print("Augmented statement")
-    print_statement(stmt.i_target_node)
-    """
 
     # First, recurse to make sure all other typedefs, containers, and
     # groupings defined underneath this statement are reflected in
@@ -336,7 +530,7 @@ def emit_augmented_type(ctx, stmt, fd, indent):
     if if_feature:
         emit_if_feature(ctx, if_feature, fd, indent)
 
-    # Find type from which this type derives
+    # Find the TOSCA data type from which this type derives
     path = stmt.arg.split('/')
     if path[0]:
         print("Augment does not specify an absolute path")
@@ -356,7 +550,7 @@ def emit_augmented_type(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    # First add properties
+    # Add properties
     fd.write(
         "%sproperties:\n"
         % (indent)
@@ -394,15 +588,10 @@ def emit_augmented_type(ctx, stmt, fd, indent):
                'leaf', 'leaf-list', 'when', 'must']
     check_substmts(stmt, handled)
 
-def print_statement(stmt):
-    for key in dir(stmt):
-        try:
-            print(key + " = " + str(getattr(stmt, key)))
-        except AttributeError:
-            pass
-        
-def wrap_text(text_string):
 
+def wrap_text(text_string):
+    """Split a text string into multiple lines to improve legibility
+    """
     # First, check to see if the text was already formatted. We do
     # this by trying to split the text string into mutliple lines
     # based on newlines contained in the string.
@@ -416,10 +605,10 @@ def wrap_text(text_string):
 
 
 def emit_text_string(ctx, lines, fd, indent):
-    # Write a text value. We use folded style if the text consists of
-    # multiple lines or if it includes a colon character (which would
-    # violate YAML syntax)
-
+    """Write a text value. We use YAML folded style if the text consists
+    of multiple lines or if it includes a colon character (or some
+    other character that would violate YAML syntax)
+    """
     if len(lines) > 1 or (':' in lines[0]) or ('\'' in lines[0]):
         # Emit folding character
         fd.write(">-\n")
@@ -726,44 +915,6 @@ def emit_import_or_include(ctx, stmt, fd, indent):
             % (indent, imported_module_name)
         )
     handled = ['prefix']
-    check_substmts(stmt, handled)
-
-
-def emit_typedef(ctx, stmt, fd, indent):
-
-    # Sub-statements for the typedef statement:
-    #
-    # default       0..1        
-    # description   0..1        
-    # reference     0..1        
-    # status        0..1        
-    # type          1           
-    # units         0..1        
-    derived_from = stmt.search_one('type')
-    units = stmt.search_one('units')
-    default = stmt.search_one('default')
-    description = stmt.search_one('description')
-
-    # Find name for this data type
-    name = stmt.arg
-
-    # # Write out data type
-    fd.write(
-        "%s%s:\n"
-        % (indent, name)
-    )
-    indent = indent + '  '
-    if description:
-        emit_description(ctx, description, fd, indent)
-    if derived_from:
-        emit_derived_from(ctx, derived_from, fd, indent)
-    if units:
-        emit_units(ctx, units, fd, indent)
-    if default:
-        emit_commented_default(ctx, default, fd, indent)
-    emit_metadata(ctx, stmt, fd, indent)
-
-    handled = ['type', 'description', 'reference', 'units', 'default']
     check_substmts(stmt, handled)
 
 
@@ -1182,102 +1333,6 @@ def must_escape(s):
         return True
     # No need to escape
     return False
-
-
-def emit_grouping(ctx, stmt, fd, indent):
-
-    # Sub-statements for the grouping statement:
-    #
-    # action        0..n        
-    # anydata       0..n        
-    # anyxml        0..n        
-    # choice        0..n        
-    # container     0..n        
-    # description   0..1        
-    # grouping      0..n        
-    # leaf          0..n        
-    # leaf-list     0..n        
-    # list          0..n        
-    # notification  0..n        
-    # reference     0..1        
-    # status        0..1        
-    # typedef       0..n        
-    # uses          0..n        
-
-    # Groupings are only translated once into data type
-    # definitions. We wrap emit_grouping around emit_data_type so we
-    # can check_substmts here.
-    emit_data_type(ctx, stmt, fd, indent)
-
-    handled = ['reference', 'description', 
-               'typedef', 'container', 'grouping', 'list',
-               'leaf', 'leaf-list', 'choice', 'uses']
-    check_substmts(stmt, handled)
-
-
-def emit_data_type(ctx, stmt, fd, indent):
-
-    # First, recurse to make sure all other typedefs, containers, and
-    # groupings defined underneath this statement are reflected in
-    # top-level data type
-    emit_data_types(ctx, stmt, fd, indent)
-
-    # Find qualified name for this data type
-    name = stmt.arg
-
-    # Write out a data type definition for this statement
-    fd.write(
-        "%s%s:\n"
-        % (indent, name)
-    )
-    indent = indent + '  '
-    description = stmt.search_one('description')
-    if description:
-        emit_description(ctx, description, fd, indent)
-    emit_metadata(ctx, stmt, fd, indent)
-    # If we have a single 'uses' statements, we'll use the grouping
-    # specified in this 'uses' statement as a parent type
-    uses = stmt.search('uses')
-    if len(uses) == 1:
-        emit_uses_derived_from(ctx, stmt, uses, fd, indent)
-    # Emit constraints
-    when = stmt.search_one('when')
-    if when:
-        emit_when(ctx, when, fd, indent)
-    must = stmt.search_one('must')
-    if must:
-        emit_must(ctx, must, fd, indent)
-
-    # First add properties
-    fd.write(
-        "%sproperties:\n"
-        % (indent)
-    )
-    emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
-
-    # If we have more than one uses statement, we'll just add the
-    # properties from the grouping specified in each 'uses' statement
-    if len(uses) > 1:
-        emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
-
-    # Next add attributes.
-    fd.write("%s# TOSCA data types do not support attributes\n"
-             % (indent)
-             )
-    fd.write("%s# Enable attributes when converting to a node type\n"
-             % (indent)
-             )
-    
-    fd.write(
-        "%s# attributes:\n"
-        % (indent)
-    )
-    emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
-
-    # If we have more than one uses statement, we'll just add the
-    # attributes from the grouping specified in each 'uses' statement
-    if len(uses) > 1:
-        emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
 
 
 def emit_uses_derived_from(ctx, stmt, uses, fd, indent):
@@ -2228,6 +2283,7 @@ def    emit_deviate(ctx, stmt, fd, indent):
     print('deviate')
 
 
+# Map YANG types to TOSCA data types    
 type_map = {
     'bits' : 'string',
     'boolean' : 'boolean',
@@ -2251,6 +2307,8 @@ type_map = {
 }
 
 
+# Debugging support: print unhandled substatements for a given
+# statement.
 def check_substmts(stmt, handled):
     for sub in stmt.substmts:
         if not sub.keyword in handled:
@@ -2265,3 +2323,11 @@ def check_substmts(stmt, handled):
             print(warning)
 
 
+# Debugging support: print a YANG statement            
+def print_statement(stmt):
+    for key in dir(stmt):
+        try:
+            print(key + " = " + str(getattr(stmt, key)))
+        except AttributeError:
+            pass
+        
