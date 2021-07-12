@@ -1,4 +1,6 @@
-""" TOSCA output plugin
+"""pyang plug-in to convert YANG schema definitions to TOSCA data
+types
+
 """
 
 import optparse
@@ -16,10 +18,45 @@ import textwrap
 
 import stringcase
 
+# TOSCA namespace for built-in IETF types
+IETF_NAMESPACE = 'org.ietf:1.0'
+IETF_NAMESPACE_PREFIX = 'inet'
+
+# Regular expressions for parsing YANG range and length
+# expressions. Copied from pyang's syntax.py file
+length_str = '((min|max|[0-9]+)\s*' \
+             '(\.\.\s*' \
+             '(min|max|[0-9]+)\s*)?)'
+length_expr = length_str + '(\|\s*' + length_str + ')*'
+re_length_part = re.compile(length_str)
+range_str = '((\-INF|min|max|((\+|\-)?[0-9]+(\.[0-9]+)?))\s*' \
+            '(\.\.\s*' \
+            '(INF|min|max|(\+|\-)?[0-9]+(\.[0-9]+)?)\s*)?)'
+range_expr = range_str + '(\|\s*' + range_str + ')*'
+re_range_part = re.compile(range_str)
+
+# Regular expressions for parsing YAML timestamps. Copied from
+# constructor.py in ruamel package
+timestamp_regexp = re.compile(
+    u'''^(?P<year>[0-9][0-9][0-9][0-9])
+      -(?P<month>[0-9][0-9]?)
+      -(?P<day>[0-9][0-9]?)
+      (?:((?P<t>[Tt])|[ \\t]+)   # explictly not retaining extra spaces
+      (?P<hour>[0-9][0-9]?)
+      :(?P<minute>[0-9][0-9])
+      :(?P<second>[0-9][0-9])
+      (?:\\.(?P<fraction>[0-9]*))?
+      (?:[ \\t]*(?P<tz>Z|(?P<tz_sign>[-+])(?P<tz_hour>[0-9][0-9]?)
+      (?::(?P<tz_minute>[0-9][0-9]))?))?)?$''', re.X)
+
 
 def pyang_plugin_init():
     plugin.register_plugin(ToscaPlugin())
 
+
+#########################################################################    
+# TOSCA plug-in object
+#########################################################################    
 
 class ToscaPlugin(plugin.PyangPlugin):
 
@@ -53,7 +90,9 @@ class ToscaPlugin(plugin.PyangPlugin):
         group.add_options(optlist)
         return
 
-## Library methods
+    #########################################################################    
+    # Plug-in setup
+    #########################################################################    
 
     def setup_ctx(self, ctx):
         """Modify the Context before the module repository is accessed (This
@@ -119,39 +158,9 @@ class ToscaPlugin(plugin.PyangPlugin):
             emit_module(ctx, module, fd, '')
 
 
-# Namespace for built-in IETF types
-IETF_NAMESPACE = 'org.ietf:1.0'
-IETF_NAMESPACE_PREFIX = 'inet'
-
-# Regular expressions for parsing YANG range and length
-# expressions. Copied from pyang's syntax.py file
-
-length_str = '((min|max|[0-9]+)\s*' \
-             '(\.\.\s*' \
-             '(min|max|[0-9]+)\s*)?)'
-length_expr = length_str + '(\|\s*' + length_str + ')*'
-re_length_part = re.compile(length_str)
-range_str = '((\-INF|min|max|((\+|\-)?[0-9]+(\.[0-9]+)?))\s*' \
-            '(\.\.\s*' \
-            '(INF|min|max|(\+|\-)?[0-9]+(\.[0-9]+)?)\s*)?)'
-range_expr = range_str + '(\|\s*' + range_str + ')*'
-re_range_part = re.compile(range_str)
-
-
-# Regular expressions for parsing YAML timestamps. Copied from
-# constructor.py in ruamel package
-timestamp_regexp = re.compile(
-    u'''^(?P<year>[0-9][0-9][0-9][0-9])
-      -(?P<month>[0-9][0-9]?)
-      -(?P<day>[0-9][0-9]?)
-      (?:((?P<t>[Tt])|[ \\t]+)   # explictly not retaining extra spaces
-      (?P<hour>[0-9][0-9]?)
-      :(?P<minute>[0-9][0-9])
-      :(?P<second>[0-9][0-9])
-      (?:\\.(?P<fraction>[0-9]*))?
-      (?:[ \\t]*(?P<tz>Z|(?P<tz_sign>[-+])(?P<tz_hour>[0-9][0-9]?)
-      (?::(?P<tz_minute>[0-9][0-9]))?))?)?$''', re.X)
-
+#########################################################################    
+# Top-level method that generates a TOSCA definitions file
+#########################################################################    
 
 def emit_module(ctx, stmt, fd, indent):
     """Convert a YANG module to TOSCA by (recursively) converting each of
@@ -247,6 +256,366 @@ def emit_module(ctx, stmt, fd, indent):
     ]
     check_substmts(stmt, handled)
 
+
+#########################################################################    
+# Generate TOSCA description
+#########################################################################    
+
+def emit_description(ctx, stmt, fd, indent):
+
+    # Emit description key
+    fd.write(
+        "%sdescription: "
+        % (indent)
+    )
+    # Emit text. Split into multiple lines if necessary
+    lines = wrap_text(stmt.arg)
+    emit_text_string(ctx, lines, fd, indent)
+
+    handled = []
+    check_substmts(stmt, handled)
+
+
+def wrap_text(text_string):
+    """Split a text string into multiple lines to improve legibility
+    """
+    # First, check to see if the text was already formatted. We do
+    # this by trying to split the text string into mutliple lines
+    # based on newlines contained in the string.
+    lines = text_string.splitlines()
+    if len(lines) > 1:
+        # Already formatted
+        return lines
+
+    # Not already formatted. Wrap it ourselves.
+    return textwrap.wrap(text_string)
+
+
+def emit_text_string(ctx, lines, fd, indent):
+    """Write a text value. We use YAML folded style if the text consists
+    of multiple lines or if it includes a colon character (or some
+    other character that would violate YAML syntax)
+    """
+    if len(lines) > 1 or (':' in lines[0]) or ('\'' in lines[0]):
+        # Emit folding character
+        fd.write(">-\n")
+        # Emit individual lines. Make sure the first line is indented
+        # correctly.
+        first = True
+        for line in lines:
+            if first:
+                fd.write(
+                    "%s%s\n"
+                    % (indent + '  ', line.lstrip())
+                )
+                first = False
+            else:
+                fd.write(
+                    "%s%s\n"
+                    % (indent + '  ', line.lstrip())
+                )
+    else:
+        fd.write("%s\n"
+                 % lines[0]
+        )
+
+
+#########################################################################    
+# Generate TOSCA metadata
+#########################################################################    
+
+def emit_metadata(ctx, stmt, fd, indent):
+    """YANG statements that do not have a TOSCA equivalent are translated
+    into TOSCA metadata.
+    """
+
+    yang_version = stmt.search_one('yang-version')
+    organization = stmt.search_one('organization')
+    contact = stmt.search_one('contact')
+    namespace = stmt.search_one("namespace")
+    prefix = stmt.search_one("prefix")
+    belongs_to = stmt.search_one('belongs-to')
+    revisions = stmt.search('revision')
+    reference = stmt.search_one('reference')
+    features = stmt.search('feature')
+
+    if yang_version or organization or contact or reference \
+       or len(revisions) or len(features) or namespace or prefix:
+        fd.write(
+            "%smetadata:\n"
+            % indent
+        )
+        indent = indent + '  '
+        if yang_version: 
+            emit_yang_version(ctx, yang_version, fd, indent)
+        if organization: 
+            emit_organization(ctx, organization, fd, indent)
+        if contact: 
+            emit_contact(ctx, contact, fd, indent)
+        if namespace:
+            emit_namespace(ctx, namespace, fd, indent)
+        if prefix:
+            emit_prefix(ctx, prefix, fd, indent)
+        if belongs_to:
+            emit_belongs_to(ctx, belongs_to, fd, indent)
+        if len(revisions):
+            emit_revisions(ctx, revisions, fd, indent)
+        if reference: 
+            emit_reference(ctx, reference, fd, indent)
+        if len(features):
+            emit_features(ctx, features, fd, indent)
+
+
+def emit_yang_version(ctx, stmt, fd, indent):
+    fd.write(
+        "%syang-version: %s\n"
+        % (indent, stmt.arg)
+    )
+    handled = []
+    check_substmts(stmt, handled)
+
+
+def emit_organization(ctx, stmt, fd, indent):
+    fd.write(
+        "%sorganization: "
+        % (indent)
+    )
+    lines = wrap_text(stmt.arg)
+    emit_text_string(ctx, lines, fd, indent)
+    handled = []
+    check_substmts(stmt, handled)
+
+
+def emit_contact(ctx, stmt, fd, indent):
+    fd.write(
+        "%scontact: "
+        % (indent)
+    )
+    lines = wrap_text(stmt.arg)
+    emit_text_string(ctx, lines, fd, indent)
+    handled = []
+    check_substmts(stmt, handled)
+
+
+def emit_namespace(ctx, stmt, fd, indent):
+    fd.write(
+        "%snamespace: %s\n"
+        % (indent, stmt.arg)
+    )
+
+
+def emit_prefix(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# TOSCA does not support prefix for local namespaces\n"
+        % indent
+    )
+    fd.write(
+        "%sprefix: %s\n"
+        % (indent, stmt.arg)
+    )
+    # Track local prefix in context since we may need it later
+    ctx.local_prefix = stmt.arg
+
+
+def emit_belongs_to(ctx, stmt, fd, indent):
+    # Sub-statements for the belongs_to statement:
+    #
+    # prefix        1           
+    fd.write(
+        "%sbelongs-to: %s\n"
+        % (indent, stmt.arg)
+    )
+
+
+def emit_revisions(ctx, revisions, fd, indent):
+    fd.write(
+        "%srevisions:\n"
+        % indent
+    )
+    for revision in revisions:
+        emit_revision(ctx, revision, fd, indent + '  ')
+
+
+def emit_revision(ctx, stmt, fd, indent):
+
+    # Sub-statements for the revision statement:
+    #
+    # description   0..1        
+    # reference     0..1        
+    description = stmt.search_one('description')
+    reference = stmt.search_one('reference')
+    handled = [
+        'description',
+        'reference'
+    ]
+    check_substmts(stmt, handled)
+
+    if not description and not reference:
+        return
+
+    # Emit the revision
+    fd.write(
+        "%s'%s':\n"
+        % (indent, stmt.arg)
+    )
+    indent = indent + '  '
+    if description:
+        emit_description(ctx, description, fd, indent)
+    if reference:
+        emit_reference(ctx, reference, fd, indent)
+
+
+def emit_reference(ctx, stmt, fd, indent):
+
+    # Check if text needs to be wrapped
+    lines = wrap_text(stmt.arg)
+
+    # Emit reference key
+    fd.write(
+        "%sreference: "
+        % (indent)
+    )
+    # Emit text
+    emit_text_string(ctx, lines, fd, indent)
+
+    handled = []
+    check_substmts(stmt, handled)
+
+
+def emit_features(ctx, features, fd, indent):
+    fd.write(
+        "%sfeatures:\n"
+        % indent
+    )
+    for feature in features:
+        emit_feature(ctx, feature, fd, indent + '  ')
+
+
+def emit_feature(ctx, stmt, fd, indent):
+    # Sub-statements for the feature statement:
+    #
+    # description   0..1        
+    # if-feature    0..n        
+    # reference     0..1        
+    # status        0..1        
+    description = stmt.search_one('description')
+    reference = stmt.search_one('reference')
+    status = stmt.search_one('status')
+
+    handled = [
+        'description',
+        'reference',
+        'status'
+    ]
+    check_substmts(stmt, handled)
+
+    if not description and not reference and not status:
+        return
+
+    # Emit the feature
+    fd.write(
+        "%s'%s':\n"
+        % (indent, stmt.arg)
+    )
+    indent = indent + '  '
+    if description:
+        emit_description(ctx, description, fd, indent)
+    if reference:
+        emit_reference(ctx, reference, fd, indent)
+    if status:
+        emit_status(ctx, status, fd, indent)
+
+
+def emit_status(ctx, stmt, fd, indent):
+    # Emit status key
+    fd.write(
+        "%sstatus: %s"
+        % (indent, stmt.arg)
+    )
+
+#########################################################################    
+# Generate TOSCA import statements
+#########################################################################    
+
+def emit_imports_and_includes(ctx, stmt, fd, indent):
+    """Both YANG 'import' and 'include' statements are translated into
+    TOSCA import statements. However, YANG 'include' statements do not
+    use a namespace prefix. Instead, definitions from the 'included'
+    YANG files are created in the namespace of the importing TOSCA
+    file
+    """
+    imports = stmt.search('import')
+    includes = stmt.search('include')
+    
+    fd.write(
+        "imports:\n"
+    )
+    indent = indent + '  '
+    # Always import built-in YANG types
+    fd.write(
+        "%s- file: %s\n%s  namespace_prefix: %s\n"
+        % (indent, IETF_NAMESPACE, indent, IETF_NAMESPACE_PREFIX)
+    )
+    # Add imports 
+    for imprt in imports:
+        emit_import_or_include(ctx, imprt, fd, indent)
+    # Add includes
+    for include in includes:
+        emit_import_or_include(ctx, include, fd, indent)
+
+
+def emit_import_or_include(ctx, stmt, fd, indent):
+
+    # Sub-statements for the import statement:
+    #
+    # description    0..1        
+    # prefix         1           
+    # reference      0..1        
+    # revision-date  0..1        
+
+    # TOSCA will import the module by its namespace name.  First, find
+    # the imported module from the context
+    imported_module = ctx.get_module(stmt.arg)
+    imported_module_name = stmt.arg + '.yaml'
+
+    if imported_module is not None:
+        # Find namespace of imported module
+        imported_namespace = imported_module.search_one("namespace")
+        if imported_namespace is not None:
+            imported_namespace_name = imported_namespace.arg
+        else:
+            imported_namespace_name = None
+    else:
+        imported_namespace_name = None
+        
+    # Emit import statement
+    prefix = stmt.search_one('prefix')
+    if prefix or imported_namespace_name:
+        fd.write(
+            "%s- file: %s\n"
+            % (indent, imported_module_name)
+        )
+        fd.write(
+            "%s  namespace_prefix: %s\n"
+            % (indent, prefix.arg)
+        )
+        if imported_namespace_name:
+            fd.write(
+                "%s  # namespace: %s\n"
+                % (indent, imported_namespace_name)
+        )
+    else:
+        fd.write(
+            "%s- %s\n"
+            % (indent, imported_module_name)
+        )
+    handled = ['prefix']
+    check_substmts(stmt, handled)
+
+
+#########################################################################    
+# Generate TOSCA data type definitions
+#########################################################################    
 
 def emit_data_types(ctx, stmt, fd, indent):
     """Emit TOSCA data type definitions for each of the following YANG
@@ -583,350 +952,20 @@ def emit_augmented_type(ctx, stmt, fd, indent):
         emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
 
     # Sanity checking. To be removed later
-    handled = ['case', 'choice', 'reference', 'description', 
-               'container', 'list', 'uses', 'if-feature',
-               'leaf', 'leaf-list', 'when', 'must']
+    handled = [
+        'case',
+        'choice',
+        'container',
+        'description',
+        'if-feature',
+        'leaf',
+        'leaf-list',
+        'list',
+        'reference',
+        'uses',
+        'when'
+    ]
     check_substmts(stmt, handled)
-
-
-def wrap_text(text_string):
-    """Split a text string into multiple lines to improve legibility
-    """
-    # First, check to see if the text was already formatted. We do
-    # this by trying to split the text string into mutliple lines
-    # based on newlines contained in the string.
-    lines = text_string.splitlines()
-    if len(lines) > 1:
-        # Already formatted
-        return lines
-
-    # Not already formatted. Wrap it ourselves.
-    return textwrap.wrap(text_string)
-
-
-def emit_text_string(ctx, lines, fd, indent):
-    """Write a text value. We use YAML folded style if the text consists
-    of multiple lines or if it includes a colon character (or some
-    other character that would violate YAML syntax)
-    """
-    if len(lines) > 1 or (':' in lines[0]) or ('\'' in lines[0]):
-        # Emit folding character
-        fd.write(">-\n")
-        # Emit individual lines. Make sure the first line is indented
-        # correctly.
-        first = True
-        for line in lines:
-            if first:
-                fd.write(
-                    "%s%s\n"
-                    % (indent + '  ', line.lstrip())
-                )
-                first = False
-            else:
-                fd.write(
-                    "%s%s\n"
-                    % (indent + '  ', line.lstrip())
-                )
-    else:
-        fd.write("%s\n"
-                 % lines[0]
-        )
-
-
-def emit_description(ctx, stmt, fd, indent):
-
-    # Check if text needs to be wrapped
-    lines = wrap_text(stmt.arg)
-
-    # Emit description key
-    fd.write(
-        "%sdescription: "
-        % (indent)
-    )
-    # Emit text
-    emit_text_string(ctx, lines, fd, indent)
-
-    handled = []
-    check_substmts(stmt, handled)
-
-
-def emit_status(ctx, stmt, fd, indent):
-    # Emit status key
-    fd.write(
-        "%sstatus: %s"
-        % (indent, stmt.arg)
-    )
-
-def emit_belongs_to(ctx, stmt, fd, indent):
-    # Sub-statements for the belongs_to statement:
-    #
-    # prefix        1           
-    fd.write(
-        "%sbelongs-to: %s\n"
-        % (indent, stmt.arg)
-    )
-
-
-def emit_reference(ctx, stmt, fd, indent):
-
-    # Check if text needs to be wrapped
-    lines = wrap_text(stmt.arg)
-
-    # Emit reference key
-    fd.write(
-        "%sreference: "
-        % (indent)
-    )
-    # Emit text
-    emit_text_string(ctx, lines, fd, indent)
-
-    handled = []
-    check_substmts(stmt, handled)
-
-
-def emit_metadata(ctx, stmt, fd, indent):
-    yang_version = stmt.search_one('yang-version')
-    organization = stmt.search_one('organization')
-    contact = stmt.search_one('contact')
-    belongs_to = stmt.search_one('belongs-to')
-    reference = stmt.search_one('reference')
-    revisions = stmt.search('revision')
-    features = stmt.search('feature')
-    namespace = stmt.search_one("namespace")
-    prefix = stmt.search_one("prefix")
-
-    if yang_version or organization or contact or reference \
-       or len(revisions) or len(features) or namespace or prefix:
-        fd.write(
-            "%smetadata:\n"
-            % indent
-        )
-        indent = indent + '  '
-        if yang_version: 
-            emit_yang_version(ctx, yang_version, fd, indent)
-        if organization: 
-            emit_organization(ctx, organization, fd, indent)
-        if contact: 
-            emit_contact(ctx, contact, fd, indent)
-        if namespace:
-            emit_namespace(ctx, namespace, fd, indent)
-        if prefix:
-            emit_prefix(ctx, prefix, fd, indent)
-        if belongs_to:
-            emit_belongs_to(ctx, belongs_to, fd, indent)
-        if len(revisions):
-            emit_revisions(ctx, revisions, fd, indent)
-        if reference: 
-            emit_reference(ctx, reference, fd, indent)
-        if len(features):
-            emit_features(ctx, features, fd, indent)
-
-
-def emit_yang_version(ctx, stmt, fd, indent):
-    fd.write(
-        "%syang-version: %s\n"
-        % (indent, stmt.arg)
-    )
-    handled = []
-    check_substmts(stmt, handled)
-
-
-def emit_organization(ctx, stmt, fd, indent):
-    fd.write(
-        "%sorganization: "
-        % (indent)
-    )
-    lines = wrap_text(stmt.arg)
-    emit_text_string(ctx, lines, fd, indent)
-    handled = []
-    check_substmts(stmt, handled)
-
-
-def emit_contact(ctx, stmt, fd, indent):
-    fd.write(
-        "%scontact: "
-        % (indent)
-    )
-    lines = wrap_text(stmt.arg)
-    emit_text_string(ctx, lines, fd, indent)
-    handled = []
-    check_substmts(stmt, handled)
-
-
-def emit_revisions(ctx, revisions, fd, indent):
-    fd.write(
-        "%srevisions:\n"
-        % indent
-    )
-    for revision in revisions:
-        emit_revision(ctx, revision, fd, indent + '  ')
-
-
-def emit_revision(ctx, stmt, fd, indent):
-
-    # Sub-statements for the revision statement:
-    #
-    # description   0..1        
-    # reference     0..1        
-    description = stmt.search_one('description')
-    reference = stmt.search_one('reference')
-    handled = ['description', 'reference']
-    check_substmts(stmt, handled)
-
-    if not description and not reference:
-        return
-
-    # Emit the revision
-    fd.write(
-        "%s'%s':\n"
-        % (indent, stmt.arg)
-    )
-    indent = indent + '  '
-    if description:
-        emit_description(ctx, description, fd, indent)
-    if reference:
-        emit_reference(ctx, reference, fd, indent)
-
-
-def emit_features(ctx, features, fd, indent):
-    fd.write(
-        "%sfeatures:\n"
-        % indent
-    )
-    for feature in features:
-        emit_feature(ctx, feature, fd, indent + '  ')
-
-
-def emit_feature(ctx, stmt, fd, indent):
-    # Sub-statements for the feature statement:
-    #
-    # description   0..1        
-    # if-feature    0..n        
-    # reference     0..1        
-    # status        0..1        
-    description = stmt.search_one('description')
-    reference = stmt.search_one('reference')
-    status = stmt.search_one('status')
-
-    handled = ['description', 'reference', 'status']
-    check_substmts(stmt, handled)
-
-    if not description and not reference and not status:
-        return
-
-    # Emit the feature
-    fd.write(
-        "%s'%s':\n"
-        % (indent, stmt.arg)
-    )
-    indent = indent + '  '
-    if description:
-        emit_description(ctx, description, fd, indent)
-    if reference:
-        emit_reference(ctx, reference, fd, indent)
-    if status:
-        emit_status(ctx, status, fd, indent)
-
-
-def emit_namespace(ctx, stmt, fd, indent):
-    fd.write(
-        "%snamespace: %s\n"
-        % (indent, stmt.arg)
-    )
-
-
-def emit_prefix(ctx, stmt, fd, indent):
-    fd.write(
-        "%s# TOSCA does not support prefix for local namespaces\n"
-        % indent
-    )
-    fd.write(
-        "%sprefix: %s\n"
-        % (indent, stmt.arg)
-    )
-    # Track local prefix in context since we may need it later
-    ctx.local_prefix = stmt.arg
-
-
-def emit_imports_and_includes(ctx, stmt, fd, indent):
-    imports = stmt.search('import')
-    includes = stmt.search('include')
-    
-    fd.write(
-        "imports:\n"
-    )
-    indent = indent + '  '
-    # Always import built-in YANG types
-    fd.write(
-        "%s- file: %s\n%s  namespace_prefix: %s\n"
-        % (indent, IETF_NAMESPACE, indent, IETF_NAMESPACE_PREFIX)
-    )
-    # Add imports 
-    for imprt in imports:
-        emit_import_or_include(ctx, imprt, fd, indent)
-    # Add includes
-    for include in includes:
-        emit_import_or_include(ctx, include, fd, indent)
-
-
-def emit_import_or_include(ctx, stmt, fd, indent):
-
-    # Sub-statements for the import statement:
-    #
-    # description    0..1        
-    # prefix         1           
-    # reference      0..1        
-    # revision-date  0..1        
-
-    # TOSCA will import the module by its namespace name.  First, find
-    # the imported module from the context
-    imported_module = ctx.get_module(stmt.arg)
-    imported_module_name = stmt.arg + '.yaml'
-
-    if imported_module is not None:
-        # Find namespace of imported module
-        imported_namespace = imported_module.search_one("namespace")
-        if imported_namespace is not None:
-            imported_namespace_name = imported_namespace.arg
-        else:
-            imported_namespace_name = None
-    else:
-        imported_namespace_name = None
-        
-    # Emit import statement
-    prefix = stmt.search_one('prefix')
-    if prefix or imported_namespace_name:
-        fd.write(
-            "%s- file: %s\n"
-            % (indent, imported_module_name)
-        )
-        fd.write(
-            "%s  namespace_prefix: %s\n"
-            % (indent, prefix.arg)
-        )
-        if imported_namespace_name:
-            fd.write(
-                "%s  # namespace: %s\n"
-                % (indent, imported_namespace_name)
-        )
-    else:
-        fd.write(
-            "%s- %s\n"
-            % (indent, imported_module_name)
-        )
-    handled = ['prefix']
-    check_substmts(stmt, handled)
-
-
-def emit_units(ctx, stmt, fd, indent):
-    fd.write(
-        "%s# TOSCA uses scalar unit types\n"
-        % indent
-    )
-    fd.write(
-        "%s# units: %s\n"
-        % (indent, stmt.arg)
-    )
 
 
 def emit_derived_from(ctx, stmt, fd, indent):
@@ -978,8 +1017,31 @@ def emit_derived_from(ctx, stmt, fd, indent):
             emit_fraction_digits(ctx, fraction_digits, fd, indent)
         emit_constraints(ctx, stmt, fd, indent)
 
-    handled = ['enum', 'fraction-digits', 'length', 'range', 'pattern', 'type']
+    handled = [
+        'enum',
+        'fraction-digits',
+        'length',
+        'range',
+        'pattern',
+        'type'
+    ]
     check_substmts(stmt, handled)
+
+
+def emit_uses_derived_from(ctx, stmt, uses, fd, indent):
+    # TODO: the current code assumes that all grouping names are
+    # defined at the top of the module (i.e. without a qualifier). We
+    # need to handle the case where groupings are defined at lower
+    # levels in the hierarchy, and need to use qualified names
+    # instead.
+
+    # If we only have one uses statement, we'll derive from the type
+    # created for the grouping specified in the 'uses' argument
+    tosca_type = create_qualified_name(ctx, uses[0].arg)
+    fd.write(
+        "%sderived_from: %s\n"
+        % (indent, tosca_type)
+    )
 
 
 def create_qualified_name(ctx, type_string, qualifier=None):
@@ -1008,6 +1070,17 @@ def create_qualified_name(ctx, type_string, qualifier=None):
     else:
         name = type_string
     return name
+
+
+def emit_units(ctx, stmt, fd, indent):
+    fd.write(
+        "%s# TOSCA uses scalar unit types\n"
+        % indent
+    )
+    fd.write(
+        "%s# units: %s\n"
+        % (indent, stmt.arg)
+    )
 
 
 def emit_constraints(ctx, stmt, fd, indent):
@@ -1335,20 +1408,30 @@ def must_escape(s):
     return False
 
 
-def emit_uses_derived_from(ctx, stmt, uses, fd, indent):
-    # TODO: the current code assumes that all grouping names are
-    # defined at the top of the module (i.e. without a qualifier). We
-    # need to handle the case where groupings are defined at lower
-    # levels in the hierarchy, and need to use qualified names
-    # instead.
+#########################################################################    
+# Generate TOSCA property definitions
+#########################################################################    
 
-    # If we only have one uses statement, we'll derive from the type
-    # created for the grouping specified in the 'uses' argument
-    tosca_type = create_qualified_name(ctx, uses[0].arg)
-    fd.write(
-        "%sderived_from: %s\n"
-        % (indent, tosca_type)
-    )
+def emit_properties(ctx, stmt, fd, indent, prop=True, qualifier=None):
+
+    # Try to maintain the order in which properties are defined by
+    # iterating over list of sub-statements
+    for sub in stmt.substmts:
+        if sub.keyword == 'leaf':
+            emit_leaf(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
+        elif sub.keyword == 'leaf-list':
+            emit_leaf_list(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
+        elif sub.keyword == 'list':
+            emit_list(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
+        elif sub.keyword == 'container':
+            emit_container(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
+        elif sub.keyword == 'choice':
+            emit_choice(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
+        elif sub.keyword == 'augment':
+            emit_augment(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
+        else:
+            # This statement does not define a property
+            pass
 
 
 def emit_uses_properties(ctx, stmt, uses, fd, indent):
@@ -1395,28 +1478,6 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
     # print("%s: uses(%s)" % (statements.mk_path_str(stmt, True), use.arg) )
     emit_properties(ctx, use.i_grouping, fd, indent, prop=prop, qualifier=prefix)
         
-
-def emit_properties(ctx, stmt, fd, indent, prop=True, qualifier=None):
-
-    # Try to maintain the order in which properties are defined by
-    # iterating over list of sub-statements
-    for sub in stmt.substmts:
-        if sub.keyword == 'leaf':
-            emit_leaf(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
-        elif sub.keyword == 'leaf-list':
-            emit_leaf_list(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
-        elif sub.keyword == 'list':
-            emit_list(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
-        elif sub.keyword == 'container':
-            emit_container(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
-        elif sub.keyword == 'choice':
-            emit_choice(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
-        elif sub.keyword == 'augment':
-            emit_augment(ctx, sub, fd, indent, prop=prop, qualifier=qualifier)
-        else:
-            # This statement does not define a property
-            pass
-
 
 def emit_leaf(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Sub-statements for the leaf statement:
