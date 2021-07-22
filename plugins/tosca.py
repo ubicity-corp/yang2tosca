@@ -1477,6 +1477,13 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
         "%s# %s from '%s'\n"
         % (indent, "properties" if prop else "attributes", use.arg)
     )
+    if_feature = use.search_one('if-feature')
+    if if_feature:
+        fd.write(
+            "%s# Used only if the '%s' feature is enabled\n"
+            % (indent, if_feature.arg)
+    )
+    # Write property definitions
     emit_properties(ctx, use.i_grouping, fd, indent, prop=prop, qualifier=prefix)
         
 
