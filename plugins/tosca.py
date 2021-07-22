@@ -800,12 +800,11 @@ def emit_data_type(ctx, stmt, fd, indent):
         emit_description(ctx, description, fd, indent)
     emit_metadata(ctx, stmt, fd, indent)
 
-    # If we have a single 'uses' statement, we use the grouping name
-    # specified in this 'uses' statement as the name of the TOSCA
-    # parent type
+    # We use the grouping name specified in the first 'uses' statement
+    # as the name of the TOSCA parent type
     uses = stmt.search('uses')
-    if len(uses) == 1:
-        emit_uses_derived_from(ctx, stmt, uses, fd, indent)
+    if len(uses):
+        emit_uses_derived_from(ctx, stmt, uses[0], fd, indent)
     # Emit constraints
     when = stmt.search_one('when')
     if when:
@@ -822,10 +821,10 @@ def emit_data_type(ctx, stmt, fd, indent):
     emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
 
     # If we have more than one uses statement, we'll just copy the
-    # property definitions from the grouping specified in each 'uses'
-    # statement
+    # property definitions from the grouping specified in each
+    # remaining 'uses' statement
     if len(uses) > 1:
-        emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
+        emit_uses_properties(ctx, stmt, uses[1:], fd, indent+'  ')
 
     # Next add attribute definitions (marked using "config false" in
     # YANG). Note that TOSCA data type definitions do not support
@@ -848,7 +847,7 @@ def emit_data_type(ctx, stmt, fd, indent):
     # If we have more than one uses statement, we'll just add the
     # attributes from the grouping specified in each 'uses' statement
     if len(uses) > 1:
-        emit_uses_attributes(ctx, stmt, uses, fd, indent+'  ')
+        emit_uses_attributes(ctx, stmt, uses[1:], fd, indent+'  ')
 
 
 def emit_augmented_type(ctx, stmt, fd, indent):
@@ -1034,10 +1033,7 @@ def emit_uses_derived_from(ctx, stmt, uses, fd, indent):
     # need to handle the case where groupings are defined at lower
     # levels in the hierarchy, and need to use qualified names
     # instead.
-
-    # If we only have one uses statement, we'll derive from the type
-    # created for the grouping specified in the 'uses' argument
-    tosca_type = create_qualified_name(ctx, uses[0].arg)
+    tosca_type = create_qualified_name(ctx, uses.arg)
     fd.write(
         "%sderived_from: %s\n"
         % (indent, tosca_type)
@@ -1475,7 +1471,12 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
             # name.
             prefix = type_parts[0]
     
-    # print("%s: uses(%s)" % (statements.mk_path_str(stmt, True), use.arg) )
+    # Keep track of the grouping from which these properties were
+    # copied.
+    fd.write(
+        "%s# %s from '%s'\n"
+        % (indent, "properties" if prop else "attributes", use.arg)
+    )
     emit_properties(ctx, use.i_grouping, fd, indent, prop=prop, qualifier=prefix)
         
 
