@@ -826,23 +826,24 @@ def emit_data_type(ctx, stmt, fd, indent):
     if len(uses) > 1:
         emit_uses_properties(ctx, stmt, uses[1:], fd, indent+'  ')
 
-    # Next add attribute definitions (marked using "config false" in
+    # If necessary add attribute definitions (marked using "config false" in
     # YANG). Note that TOSCA data type definitions do not support
     # attributes. We just mark which property definitions need to be
     # converted to attribute definitions when TOSCA data types are
     # converted to node types.
-    fd.write("%s# TOSCA data types do not support attributes\n"
-             % (indent)
-             )
-    fd.write("%s# Enable attributes when converting to a node type\n"
-             % (indent)
-             )
-    
-    fd.write(
-        "%s# attributes:\n"
-        % (indent)
-    )
-    emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
+    if has_attributes(stmt):
+        fd.write("%s# TOSCA data types do not support attributes\n"
+                 % (indent)
+                 )
+        fd.write("%s# Enable attributes when converting to a node type\n"
+                 % (indent)
+                 )
+
+        fd.write(
+            "%s# attributes:\n"
+            % (indent)
+        )
+        emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
 
     # If we have more than one uses statement, we'll just add the
     # attributes from the grouping specified in each 'uses' statement
@@ -931,19 +932,20 @@ def emit_augmented_type(ctx, stmt, fd, indent):
     if len(uses):
         emit_uses_properties(ctx, stmt, uses, fd, indent+'  ')
 
-    # Next add attributes.
-    fd.write("%s# TOSCA data types do not support attributes\n"
-             % (indent)
-             )
-    fd.write("%s# Enable attributes when converting to a node type\n"
-             % (indent)
-             )
-    
-    fd.write(
-        "%s# attributes:\n"
-        % (indent)
-    )
-    emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
+    # Next add attributes if necessary
+    if has_attributes(stmt):
+        fd.write("%s# TOSCA data types do not support attributes\n"
+                 % (indent)
+                 )
+        fd.write("%s# Enable attributes when converting to a node type\n"
+                 % (indent)
+                 )
+
+        fd.write(
+            "%s# attributes:\n"
+            % (indent)
+        )
+        emit_properties(ctx, stmt, fd, indent+'  ', prop=False)
 
     # If we have uses statements, we'll just add the attributes from
     # the grouping specified in each 'uses' statement
@@ -1408,6 +1410,44 @@ def must_escape(s):
 # Generate TOSCA property definitions
 #########################################################################    
 
+
+def has_properties(stmt):
+    """Check to see if this statement defines its own properties"""
+
+    # First, check local property definitions
+    for sub in stmt.substmts:
+        if sub.keyword in ['leaf','leaf-list','list','container','choice','augment'] and \
+           not is_attribute(sub): return True
+
+    # Then, check 'uses' substatements
+    usess = stmt.search('uses')
+    if len(usess) > 1:
+        for uses in usess[1:]:
+            grouping = uses.i_grouping
+            if grouping and has_properties(grouping):
+                return True
+    return False
+
+
+def has_attributes(stmt):
+    """Check to see if this statement defines its own attributes"""
+
+    # First, check local attribute definitions
+    for sub in stmt.substmts:
+        if sub.keyword in ['leaf','leaf-list','list','container','choice','augment'] and \
+           is_attribute(sub): return True
+
+    # Then, check 'uses' substatements
+    usess = stmt.search('uses')
+    if len(usess) > 1:
+        for uses in usess[1:]:
+            grouping = uses.i_grouping
+            if grouping and has_attributes(grouping):
+                return True
+            
+    return False
+
+
 def emit_properties(ctx, stmt, fd, indent, prop=True, qualifier=None):
 
     # Try to maintain the order in which properties are defined by
@@ -1451,8 +1491,14 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
     # status        0..1        
     # when          0..1        
 
-    if not use.i_grouping:
+    grouping = use.i_grouping
+    if not grouping:
         print("%s: uses(%s) not found" % (statements.mk_path_str(stmt, True), use.arg) )
+        return
+
+    if (prop and not has_properties(grouping)) or \
+       (not prop and not has_attributes(grouping)):
+        # Nothing to do
         return
 
     # Just emit the properties in this grouping. Prepend namespace
@@ -1471,6 +1517,7 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
             # name.
             prefix = type_parts[0]
     
+
     # Keep track of the grouping from which these properties were
     # copied.
     fd.write(
@@ -1486,6 +1533,14 @@ def emit_use(ctx, stmt, use, fd, indent, prop=True):
     # Write property definitions
     emit_properties(ctx, use.i_grouping, fd, indent, prop=prop, qualifier=prefix)
         
+
+def is_attribute(stmt):
+    """Check if a statement defines an attribute. An attribute is a
+    statement that contains a "config false" substatement.
+    """
+    config = stmt.search_one('config')
+    return (config != None) and (config.arg=='false')
+
 
 def emit_leaf(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Sub-statements for the leaf statement:
@@ -1503,8 +1558,7 @@ def emit_leaf(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # when          0..1        
 
     # Check if property or attribute
-    config = stmt.search_one('config')
-    is_attr = (config != None) and (config.arg=='false')
+    is_attr = is_attribute(stmt)
     if is_attr == prop: return
 
     # Get name
@@ -1616,9 +1670,7 @@ def emit_leaf_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # when          0..1        
 
     # Check if property or attribute
-    config = stmt.search_one('config')
-    is_attr = (config != None) and (config.arg=='false')
-    if is_attr == prop: return
+    if is_attribute(stmt) == prop: return
 
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
@@ -1691,9 +1743,7 @@ def emit_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # when          0..1        
 
     # Check if property or attribute
-    config = stmt.search_one('config')
-    is_attr = (config != None) and (config.arg=='false')
-    if is_attr == prop: return
+    if is_attribute(stmt) == prop: return
 
     # Find qualified entry_schema for this list
     if qualifier:
@@ -1789,9 +1839,7 @@ def emit_container(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # when          0..1        
 
     # Check if property or attribute
-    config = stmt.search_one('config')
-    is_attr = (config != None) and (config.arg=='false')
-    if is_attr == prop: return
+    if is_attribute(stmt) == prop: return
 
     # Find qualified type name for this container
     if qualifier:
@@ -1850,8 +1898,7 @@ def emit_choice(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # when          0..1        
 
     # Check if property or attribute
-    config = stmt.search_one('config')
-    is_attr = (config != None) and (config.arg=='false')
+    is_attr = is_attribute(stmt)
     if is_attr == prop: return
 
     # Get list of cases or list of leafs. If we have a list of leafs,
