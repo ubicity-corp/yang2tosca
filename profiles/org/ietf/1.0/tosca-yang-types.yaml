@@ -1,0 +1,59 @@
+tosca_definitions_version: tosca_simple_yaml_1_3
+
+metadata:
+  template_name: tosca-yang-types.yaml
+  template_author: Ubicity Corp.
+  template_version: 1.0
+ 
+description: >-
+  TOSCA type definitions for built-in YANG types
+
+data_types:
+
+  int8: 
+    description: YANG built-in type for 8-bit signed integer                
+    derived_from: integer
+    constraints:
+      - in_range: [-128, 127]
+
+  int16: 
+    description: YANG built-in type for 16-bit signed integer               
+    derived_from: integer
+    constraints:
+      - in_range: [-32768, 32767]
+
+  int32: 
+    description: YANG built-in type for 32-bit signed integer               
+    derived_from: integer
+    constraints:
+      - in_range: [-2147483648, 2147483647]
+
+  int64: 
+    description: YANG built-in type for 64-bit signed integer               
+    derived_from: integer
+    constraints:
+      - in_range: [-9223372036854775808, 9223372036854775807]
+
+  uint8: 
+    description: YANG built-in type for 8-bit unsigned integer              
+    derived_from: integer
+    constraints:
+      - in_range: [0, 255]
+
+  uint16: 
+    description: YANG built-in type for 16-bit unsigned integer             
+    derived_from: integer
+    constraints:
+      - in_range: [0, 65535]
+
+  uint32: 
+    description: YANG built-in type for 32-bit unsigned integer             
+    derived_from: integer
+    constraints:
+      - in_range: [0, 4294967295]
+
+  uint64: 
+    description: YANG built-in type for 64-bit unsigned integer
+    derived_from: integer
+    constraints:
+      - in_range: [0, 18446744073709551615]
