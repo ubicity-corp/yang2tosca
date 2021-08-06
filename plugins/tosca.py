@@ -230,8 +230,8 @@ def emit_module(ctx, stmt, fd, indent):
     fd.write("data_types:\n\n")
     indent = indent + '  '
 
-    # Emit data type definitions
-    emit_data_types(ctx, stmt, fd, indent)
+    # Emit data types defined in this module
+    emit_data_types_in_stmt(ctx, stmt, fd, indent)
 
     # Sanity checking. To be removed later
     handled = [
@@ -617,9 +617,11 @@ def emit_import_or_include(ctx, stmt, fd, indent):
 # Generate TOSCA data type definitions
 #########################################################################    
 
-def emit_data_types(ctx, stmt, fd, indent):
-    """Emit TOSCA data type definitions for each of the following YANG
+def emit_data_types_in_stmt(ctx, stmt, fd, indent):
+    """Emit TOSCA data types for substatements of this statement. Data
+    type definitions are generated for each of the following YANG
     statements:
+
     - typedef
     - grouping
     - container
@@ -627,6 +629,7 @@ def emit_data_types(ctx, stmt, fd, indent):
     - choice
     - augment (at the module level)
     - augment (within uses statement)
+
     """
 
     # Emit data type definitions for 'typedef' statements
@@ -644,14 +647,24 @@ def emit_data_types(ctx, stmt, fd, indent):
     # Emit data type definitions for 'container' statements
     containers = stmt.search('container')
     for container in containers:
-        emit_data_type(ctx, container, fd, indent)
-        fd.write("\n")
+        # If a container has a single 'uses' statement only, there is
+        # no need to create a separate data type for it. We'll just
+        # use the data type for the 'grouping' specified in the 'uses'
+        # statement.
+        if not has_single_uses_stmt_only(container):
+            emit_data_type(ctx, container, fd, indent)
+            fd.write("\n")
 
     # Emit data type definitions for 'list' statements
     lists = stmt.search('list')
     for lst in lists:
-        emit_data_type(ctx, lst, fd, indent)
-        fd.write("\n")
+        # If a container has a single 'uses' statement only, there is
+        # no need to create a separate data type for it. We'll just
+        # use the data type for the 'grouping' specified in the 'uses'
+        # statement.
+        if not has_single_uses_stmt_only(lst):
+            emit_data_type(ctx, lst, fd, indent)
+            fd.write("\n")
 
     # Emit data type definitions underneath 'uses' statements
     usess = stmt.search('uses')
@@ -667,7 +680,7 @@ def emit_data_types(ctx, stmt, fd, indent):
     for choice in choices:
         cases = choice.search('case')
         for case in cases:
-            emit_data_types(ctx, case, fd, indent)
+            emit_data_types_in_stmt(ctx, case, fd, indent)
 
     # Handle type definitions based on 'augment' statements
     augmentations = stmt.search('augment')
@@ -764,6 +777,34 @@ def emit_grouping(ctx, stmt, fd, indent):
     check_substmts(stmt, handled)
 
 
+def has_single_uses_stmt_only(stmt):
+    """Check to see if this statement has exactly one 'uses' substatement
+    without defining its own properties
+    """
+
+    # First, check 'uses' substatements
+    usess = stmt.search('uses')
+    if len(usess) != 1:
+        return False
+
+    # Then check local property definitions
+    for sub in stmt.substmts:
+        if sub.keyword in ['leaf','leaf-list','list','container','choice','augment']:
+            return False
+
+    # Has single uses statement only
+    return True
+
+
+def get_single_uses_stmt_grouping(ctx, stmt):
+    """If a statement defines exactly on 'uses' substatement, return the
+    name of the grouping to which the 'uses' refers.
+    """
+    # Get the 'uses' substatements
+    usess = stmt.search('uses')
+    return create_qualified_name(ctx, usess[0].i_grouping.arg)
+
+
 def emit_data_type(ctx, stmt, fd, indent):
     """Create a TOSCA data type definition from a YANG statement. This
     method is used for 'container', 'grouping', and 'list'
@@ -784,7 +825,7 @@ def emit_data_type(ctx, stmt, fd, indent):
     # lists, groupings, choices, and augments defined underneath this
     # statement are reflected into top-level TOSCA data type
     # definitions.
-    emit_data_types(ctx, stmt, fd, indent)
+    emit_data_types_in_stmt(ctx, stmt, fd, indent)
 
     # Find the name for this data type
     name = stmt.arg
@@ -880,7 +921,7 @@ def emit_augmented_type(ctx, stmt, fd, indent):
     # First, recurse to make sure all other typedefs, containers, and
     # groupings defined underneath this statement are reflected in
     # top-level data type
-    emit_data_types(ctx, stmt, fd, indent)
+    emit_data_types_in_stmt(ctx, stmt, fd, indent)
 
     # Find qualified name for this data type
     name = stmt.i_target_node.arg
@@ -1746,10 +1787,13 @@ def emit_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
     if is_attribute(stmt) == prop: return
 
     # Find qualified entry_schema for this list
-    if qualifier:
-        entry_schema = qualifier + ':' + stmt.arg
+    if has_single_uses_stmt_only(stmt):
+        entry_schema = get_single_uses_stmt_grouping(ctx, stmt)
     else:
-        entry_schema = stmt.arg
+        if qualifier:
+            entry_schema = qualifier + ':' + stmt.arg
+        else:
+            entry_schema = stmt.arg
 
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
@@ -1841,11 +1885,16 @@ def emit_container(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Check if property or attribute
     if is_attribute(stmt) == prop: return
 
-    # Find qualified type name for this container
-    if qualifier:
-        type_name = qualifier + ':' + stmt.arg
+    # Find qualified type name for this container. If the container
+    # statement has a single 'uses' statement only, we use the name of
+    # the grouping to which that 'uses' statement refers.
+    if has_single_uses_stmt_only(stmt):
+        type_name = get_single_uses_stmt_grouping(ctx, stmt)
     else:
-        type_name = stmt.arg
+        if qualifier:
+            type_name = qualifier + ':' + stmt.arg
+        else:
+            type_name = stmt.arg
 
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
