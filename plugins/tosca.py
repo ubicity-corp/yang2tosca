@@ -802,7 +802,7 @@ def get_single_uses_stmt_grouping(ctx, stmt):
     """
     # Get the 'uses' substatements
     usess = stmt.search('uses')
-    return create_qualified_name(ctx, usess[0].i_grouping.arg)
+    return create_qualified_name(ctx, usess[0].arg)
 
 
 def emit_data_type(ctx, stmt, fd, indent):
