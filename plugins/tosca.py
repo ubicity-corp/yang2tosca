@@ -1786,14 +1786,15 @@ def emit_list(ctx, stmt, fd, indent, prop=True, qualifier=None):
     # Check if property or attribute
     if is_attribute(stmt) == prop: return
 
-    # Find qualified entry_schema for this list
+    # Find qualified entry schema for this container. If the container
+    # statement has a single 'uses' statement only, we use the name of
+    # the grouping to which that 'uses' statement refers.
     if has_single_uses_stmt_only(stmt):
         entry_schema = get_single_uses_stmt_grouping(ctx, stmt)
     else:
-        if qualifier:
-            entry_schema = qualifier + ':' + stmt.arg
-        else:
-            entry_schema = stmt.arg
+        entry_schema = stmt.arg
+    if qualifier:
+        entry_schema = qualifier + ':' + entry_schema
 
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
@@ -1891,11 +1892,11 @@ def emit_container(ctx, stmt, fd, indent, prop=True, qualifier=None):
     if has_single_uses_stmt_only(stmt):
         type_name = get_single_uses_stmt_grouping(ctx, stmt)
     else:
-        if qualifier:
-            type_name = qualifier + ':' + stmt.arg
-        else:
-            type_name = stmt.arg
+        type_name = stmt.arg
+    if qualifier:
+        type_name = qualifier + ':' + type_name
 
+    # Property name
     if ctx.opts.camel_case:
         name = stringcase.camelcase(stmt.arg)
     else:
