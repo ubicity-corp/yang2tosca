@@ -18,6 +18,9 @@ import textwrap
 
 import stringcase
 
+# Import config file support
+import config.config
+
 # TOSCA namespace for built-in IETF types
 IETF_NAMESPACE = 'org.ietf:1.0'
 IETF_NAMESPACE_PREFIX = 'inet'
@@ -84,6 +87,9 @@ class ToscaPlugin(plugin.PyangPlugin):
                                  dest='camel_case',
                                  action="store_true",
                                  help='Use camel case capitalization style'),
+            optparse.make_option('--tosca-config-file',
+                                 dest='tosca_config_file',
+                                 help='Configuraton file for TOSCA translator'),
             ]
 
         group = optparser.add_option_group("TOSCA specific options")
@@ -102,15 +108,14 @@ class ToscaPlugin(plugin.PyangPlugin):
         if ctx.opts.tosca_debug:
             print("Setting up context for all plugins")
         # Do nothing
-        ctx.opts.stmts = None
         return
 
     def setup_fmt(self, ctx):
         """Modify the Context at setup time.  Called for the selected plugin.
         """
-        if ctx.opts.tosca_debug:
-            print("Setting up context for the TOSCA plugin")
-        ctx.implicit_errors = False
+
+        if ctx.opts.tosca_config_file:
+            ctx.tosca_config = config.config.read_tosca_config(ctx.opts.tosca_config_file)
         return
 
     def pre_load_modules(self, ctx):

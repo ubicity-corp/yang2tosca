@@ -1,0 +1,8 @@
+profiles:
+  'org.ietf:1.0':
+    namespace_prefix: 'inet'
+    mandatory: True
+    modules:
+      - ietf-inet-types.yang
+      - ietf-yang-types.yang
+
