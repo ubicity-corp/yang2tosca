@@ -854,18 +854,20 @@ def emit_data_type(ctx, stmt, fd, indent):
     if must:
         emit_must(ctx, must, fd, indent)
 
-    # First add property definitions
-    fd.write(
-        "%sproperties:\n"
-        % (indent)
-    )
-    emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
+    # First add property definitions if necessary
+    has_props = has_properties(stmt)
+    if has_props:
+        fd.write(
+            "%sproperties:\n"
+            % (indent)
+        )
+        emit_properties(ctx, stmt, fd, indent+'  ', prop=True)
 
-    # If we have more than one uses statement, we'll just copy the
-    # property definitions from the grouping specified in each
-    # remaining 'uses' statement
-    if len(uses) > 1:
-        emit_uses_properties(ctx, stmt, uses[1:], fd, indent+'  ')
+        # If we have more than one uses statement, we'll just copy the
+        # property definitions from the grouping specified in each
+        # remaining 'uses' statement
+        if len(uses) > 1:
+            emit_uses_properties(ctx, stmt, uses[1:], fd, indent+'  ')
 
     # If necessary add attribute definitions (marked using "config false" in
     # YANG). Note that TOSCA data type definitions do not support
@@ -880,6 +882,12 @@ def emit_data_type(ctx, stmt, fd, indent):
                  % (indent)
                  )
 
+        if not has_props:
+            # We have not previously emitted the 'properties' key
+            fd.write(
+                "%sproperties:\n"
+                % (indent)
+            )
         fd.write(
             "%s# attributes:\n"
             % (indent)
