@@ -113,9 +113,17 @@ class ToscaPlugin(plugin.PyangPlugin):
     def setup_fmt(self, ctx):
         """Modify the Context at setup time.  Called for the selected plugin.
         """
-
+        # Read config file
         if ctx.opts.tosca_config_file:
-            ctx.tosca_config = config.config.read_tosca_config(ctx.opts.tosca_config_file)
+            tosca_config = config.config.read_tosca_config(ctx.opts.tosca_config_file)
+        else:
+            tosca_config = dict()
+
+        # Extract type map
+        try:
+            ctx.type_map = tosca_config['type_map']
+        except KeyError:
+            ctx.type_map = dict()
         return
 
     def pre_load_modules(self, ctx):
@@ -1039,7 +1047,7 @@ def emit_derived_from(ctx, stmt, fd, indent):
     # type              0..n        
 
     try:
-        tosca_type = type_map[stmt.arg]
+        tosca_type = ctx.type_map[stmt.arg]
     except KeyError:
         # Not a built-in type. Use type name as is, but strip local
         # prefix if necessary (since TOSCA doesn't have locally
@@ -2095,7 +2103,7 @@ def emit_type(ctx, stmt, fd, indent, qualifier=None):
     # type              0..n        
 
     try:
-        tosca_type = type_map[stmt.arg]
+        tosca_type = ctx.type_map[stmt.arg]
     except KeyError:
         # Not a built-in type. Use type name as is, but strip local
         # prefix if necessary (since TOSCA doesn't have locally
@@ -2460,31 +2468,6 @@ def    emit_deviate(ctx, stmt, fd, indent):
     # unique        0..n        
     # units         0..1        
     print('deviate')
-
-
-# Map YANG types to TOSCA data types    
-type_map = {
-    'bits' : 'string',
-    'boolean' : 'boolean',
-    'decimal64' : 'float',
-    'empty' : 'tosca.datatypes.Root',
-    'enumeration' : 'string',
-    'identityref' : 'identityref',
-    'instance' : 'instance',
-    'instance-identifier' : 'integer # instance-identifier',
-    'int8' : 'inet:int8',
-    'int16' : 'inet:int16',
-    'int32' : 'inet:int32',
-    'int64' : 'inet:int64',
-    'leafref' : 'leafref',
-    'string' : 'string',
-    'uint8' : 'inet:uint8',
-    'uint16' : 'inet:uint16',
-    'uint32' : 'inet:uint32',
-    'uint64' : 'inet:uint64',
-    'union' : 'union',
-}
-
 
 # Debugging support: print unhandled substatements for a given
 # statement.

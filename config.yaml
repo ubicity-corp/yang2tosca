@@ -1,3 +1,25 @@
+# Map YANG types to TOSCA data types    
+type_map:
+  'bits' : 'string'
+  'boolean' : 'boolean'
+  'decimal64' : 'float'
+  'empty' : 'tosca.datatypes.Root'
+  'enumeration' : 'string'
+  'identityref' : 'identityref'
+  'instance' : 'instance'
+  'instance-identifier' : 'integer # instance-identifier'
+  'int8' : 'inet:int8'
+  'int16' : 'inet:int16'
+  'int32' : 'inet:int32'
+  'int64' : 'inet:int64'
+  'leafref' : 'leafref'
+  'string' : 'string'
+  'uint8' : 'inet:uint8'
+  'uint16' : 'inet:uint16'
+  'uint32' : 'inet:uint32'
+  'uint64' : 'inet:uint64'
+  'union' : 'union'
+
 profiles:
   'org.ietf:1.0':
     namespace_prefix: 'inet'
