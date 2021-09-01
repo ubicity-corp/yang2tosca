@@ -15,10 +15,13 @@ TOSCA_FILE="$2"
 HERE=$(dirname "$(readlink --canonicalize "$BASH_SOURCE")")
 PLUGINDIR=${HERE}/plugins
 
+# Hardcode the config file for now
+CONFIGFILE=${HERE}/config.yaml
+
 # Run the conversion
 if [[ "${TOSCA_FILE}" == "" ]]; then
-    pyang -f tosca --plugindir "${PLUGINDIR}" "${YANG_FILE}" 
+    pyang -f tosca --plugindir "${PLUGINDIR}" --tosca-config-file "${CONFIGFILE}" "${YANG_FILE}" 
 else
-    pyang -f tosca --plugindir "${PLUGINDIR}" "${YANG_FILE}" -o "${TOSCA_FILE}"
+    pyang -f tosca --plugindir "${PLUGINDIR}" --tosca-config-file "${CONFIGFILE}" "${YANG_FILE}" -o "${TOSCA_FILE}"
 fi    
 
