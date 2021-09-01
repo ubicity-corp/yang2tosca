@@ -1,7 +1,6 @@
 # yang2tosca
 
-`yang2tosca` is a [pyang](https://github.com/mbj4668/pyang) plugin for
-converting YANG modules to TOSCA files.
+`yang2tosca` is a tool for converting YANG modules to TOSCA files. While it is packaged as a standalone tool, it is built as a [pyang](https://github.com/mbj4668/pyang) plugin.
 
 A typical conversion will involve two steps:
 
@@ -21,15 +20,15 @@ virtual environment. Create the virtual environment as follows:
 ```
 python3 -m venv env
 source env/bin/activate
-pip install wheel
+pip install -U pip wheel
 pip install pyang
 pip install stringcase
 ```
 
 ## Usage
 
-Specify TOSCA as the desired pyang output format as follows:
+Convert a YANG module to a TOSCA service template as follows:
 
 ```
-pyang -f tosca --plugindir <install_dir>/yang2tosca/plugins/ <yang_file> -o <tosca_file>
+yang2tosca <yang_file> <tosca_file>
 ```
