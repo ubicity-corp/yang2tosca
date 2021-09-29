@@ -309,6 +309,8 @@ def emit_text_string(ctx, lines, fd, indent):
     of multiple lines or if it includes a colon character (or some
     other character that would violate YAML syntax)
     """
+    if not lines:
+        lines = [""]
     if len(lines) > 1 or (':' in lines[0]) or ('\'' in lines[0]):
         # Emit folding character
         fd.write(">-\n")
