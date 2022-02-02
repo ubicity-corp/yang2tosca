@@ -6,8 +6,14 @@ def read_tosca_config(config_file_name):
     """Read the configuration file for the YANG to TOSCA translator
     """
 
+    if not config_file_name:
+        # Use built-in config
+        import pkg_resources
+        config_file_name = pkg_resources.resource_filename('yang2tosca', 'config.yaml')
+
     # Open config file
     try:
+        print("Use config file '%s'" % (config_file_name))
         config_file = open(config_file_name)
     except Exception as e:
         print("Unable to open '%s': %s" % (config_file_name, str(e)))

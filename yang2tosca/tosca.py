@@ -114,10 +114,7 @@ class ToscaPlugin(plugin.PyangPlugin):
         """Modify the Context at setup time.  Called for the selected plugin.
         """
         # Read config file
-        if ctx.opts.tosca_config_file:
-            tosca_config = cfg.read_tosca_config(ctx.opts.tosca_config_file)
-        else:
-            tosca_config = dict()
+        tosca_config = cfg.read_tosca_config(ctx.opts.tosca_config_file)
 
         # Extract type map
         try:
