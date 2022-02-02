@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+
+import pkg_resources
+import os.path
+
+# Find the filename of the 'tosca.py' module in the 'yang2tosca' module
+tosca_plugin = pkg_resources.resource_filename('yang2tosca', 'tosca.py')
+
+# Return the directory name
+tosca_plugin_directory = os.path.dirname(tosca_plugin)
+print(tosca_plugin_directory)

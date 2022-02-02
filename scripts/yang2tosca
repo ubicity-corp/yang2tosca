@@ -12,8 +12,7 @@ YANG_FILE="$1"
 TOSCA_FILE="$2"
 
 # Find the TOSCA plugin directory
-HERE=$(dirname "$(readlink --canonicalize "$BASH_SOURCE")")
-PLUGINDIR=${HERE}/plugins
+PLUGINDIR=$(get_tosca_plugin_dir)
 
 # Hardcode the config file for now
 CONFIGFILE=${HERE}/config.yaml

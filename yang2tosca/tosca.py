@@ -19,7 +19,7 @@ import textwrap
 import stringcase
 
 # Import config file support
-import config.config
+import yang2tosca.config.config as cfg
 
 # TOSCA namespace for built-in IETF types
 IETF_NAMESPACE = 'org.ietf:1.0'
@@ -115,14 +115,14 @@ class ToscaPlugin(plugin.PyangPlugin):
         """
         # Read config file
         if ctx.opts.tosca_config_file:
-            tosca_config = config.config.read_tosca_config(ctx.opts.tosca_config_file)
+            tosca_config = cfg.read_tosca_config(ctx.opts.tosca_config_file)
         else:
             tosca_config = dict()
 
         # Extract type map
         try:
             ctx.type_map = tosca_config['type_map']
-        except KeyError:
+        except (KeyError, TypeError):
             ctx.type_map = dict()
         return
 
