@@ -38,18 +38,6 @@ upgrade ``pip`` to the latest version, run the following command in
 your virtual environment:
 
     pip install -U pip 
-
-The ubicity software can be installed directly from the git repository
-by running the following command in your virtual environment:
-
-    pip install git+https://github.com/lauwers/ubicity
-    
-Alternatively, you can also clone the git repo first and then run the
-installer in your local copy as follows:
-
-    git clone https://github.com/lauwers/ubicity
-    cd ubicity
-    pip install . 
     
 ## Downloading the software
 
@@ -65,7 +53,7 @@ installer in your local copy as follows:
     cd yang2tosca
     pip install . 
     
-## Using yang2tosca
+# Using yang2tosca
 
 Convert a YANG module to a TOSCA service template as follows:
 
@@ -80,6 +68,6 @@ The config file uses YAML to define:
 
 2. Which profiles need to be included in the TOSCA output.
 
-If no config file is specified, ``yang2tosca`` uses the following built-in file:
+If no config file is specified, ``yang2tosca`` uses the built-in [config.yaml](/yang2tosca/config.yaml) file.
 
 
