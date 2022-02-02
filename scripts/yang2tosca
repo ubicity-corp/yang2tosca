@@ -1,26 +1,57 @@
 #!/bin/bash
 set -e
 
-# Parse command line arguments
-USAGE="Usage: $0 <yang_file> [<tosca_file>]"
+# Usage message
+USAGE="Usage: $0 [ --config|-c <config_file> ] <yang_file> [<tosca_file>]"
 
-if [[ "$#" == "0" || "$#" -gt "2" ]]; then
-   echo "${USAGE}"
-   exit 1
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+	-c|--config)
+	    if [ -z ${CONFIGFILE} ] && [ ! -z "$2" ]; then
+		CONFIGFILE="$2"
+	    else
+		echo $USAGE
+		exit 1
+	    fi
+	    shift # past argument
+	    shift # past value
+	    ;;
+	-*|--*)
+	    echo $USAGE
+	    exit 1
+	    ;;
+	*)
+	    if [ -z ${YANGFILE} ]; then
+		YANGFILE="$1"
+	    elif [ -z ${TOSCAFILE} ]; then
+		TOSCAFILE="$1"
+	    else # Unknown positional argument
+		echo $USAGE
+		exit 1
+	    fi
+	    shift # past argument
+	    ;;
+    esac
+done
+
+# Make sure yang file was specified
+if [ -z ${YANGFILE} ]; then
+    echo $USAGE
+    exit 1
 fi
-YANG_FILE="$1"
-TOSCA_FILE="$2"
 
 # Find the TOSCA plugin directory
 PLUGINDIR=$(get_tosca_plugin_dir)
 
-# Hardcode the config file for now
-CONFIGFILE=${HERE}/config.yaml
+# Create arguments for the pyang command
+ARGS="-f tosca --plugindir ${PLUGINDIR}"
+if [ ! -z ${TOSCAFILE} ]; then
+    ARGS+=" -o ${TOSCAFILE}"
+fi
+if [ ! -z ${CONFIGFILE} ]; then
+    ARGS+=" --tosca-config-file ${CONFIGFILE}"
+fi
 
 # Run the conversion
-if [[ "${TOSCA_FILE}" == "" ]]; then
-    pyang -f tosca --plugindir "${PLUGINDIR}" --tosca-config-file "${CONFIGFILE}" "${YANG_FILE}" 
-else
-    pyang -f tosca --plugindir "${PLUGINDIR}" --tosca-config-file "${CONFIGFILE}" "${YANG_FILE}" -o "${TOSCA_FILE}"
-fi    
-
+pyang ${ARGS} "${YANGFILE}" 
