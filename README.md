@@ -41,8 +41,9 @@ your virtual environment:
     
 ## Downloading the software
 
-The yang2tosca software can be installed directly from the git repository
-by running the following command in your virtual environment:
+The ``yang2tosca`` software can be installed directly from the git
+repository by running the following command in your virtual
+environment:
 
     pip install git+https://github.com/lauwers/yang2tosca
     
@@ -68,6 +69,7 @@ The config file uses YAML to define:
 
 2. Which profiles need to be included in the TOSCA output.
 
-If no config file is specified, ``yang2tosca`` uses the built-in [config.yaml](/yang2tosca/config.yaml) file.
+If no config file is specified, ``yang2tosca`` uses the built-in
+[config.yaml](/yang2tosca/config.yaml) file.
 
 
