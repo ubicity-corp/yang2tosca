@@ -5,17 +5,22 @@ yang2tosca
 definitions. While it is packaged as a standalone tool, it is built as
 a [pyang](https://github.com/mbj4668/pyang) plugin.
 
+> `yang2tosca` currently generates TOSCA Simple Profile in YAML v1.3
+> files. Support for TOSCA Version 2.0 is under development.
+
 A typical conversion will involve two steps:
 
 1. First, YANG models are converted automatically by yang2tosca to
    (almost) equivalent TOSCA date type definitions.
-
 2. Next, service designers must (manually) convert some of the
    resulting TOSCA data types into node types, relationship types,
    requirements, and capabilities. This step requires knowledge of
    service-specific semantics and cannot be automated.
 
 # Installing yang2tosca
+
+These instructions are for Ubuntu 22.04 LTS.  Installation
+instructions for other platforms are under development.
 
 ## Setting up a virtual environment
 
@@ -66,10 +71,11 @@ If no tosca_file is specified, the output will be directed to stdout.
 The config file uses YAML to define:
 
 1. How YANG types are mapped to TOSCA types
-
 2. Which profiles need to be included in the TOSCA output.
 
 If no config file is specified, ``yang2tosca`` uses the built-in
 [config.yaml](/yang2tosca/config.yaml) file.
+
+> Documentation for `config.yaml` is under development.
 
 
