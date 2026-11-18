@@ -1,6 +1,11 @@
 yang2tosca
 ===
 
+> **This repository is archived.** YANG conversion is now part of
+> [any2tosca](https://github.com/ubicity-corp/any2tosca), which converts
+> JSON Schema, OpenAPI, Redfish and YANG schemas to TOSCA 2.0 node types and
+> data types. Its `yang2tosca` command replaces this tool.
+
 `yang2tosca` is a tool for converting YANG modules to TOSCA type
 definitions. While it is packaged as a standalone tool, it is built as
 a [pyang](https://github.com/mbj4668/pyang) plugin.
